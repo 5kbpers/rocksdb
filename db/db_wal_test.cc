@@ -36,7 +36,7 @@ class EnrichedSpecialEnv : public SpecialEnv {
   Status NewSequentialFile(const std::string& f,
                            std::unique_ptr<SequentialFile>* r,
                            const EnvOptions& soptions) override {
-    InstrumentedMutexLock l(&env_mutex_);
+    InstrumentedMutexLock l(&env_mutex_, __func__, __LINE__, nullptr);
     if (f == skipped_wal) {
       deleted_wal_reopened = true;
       if (IsWAL(f) && largetest_deleted_wal.size() != 0 &&
@@ -49,7 +49,7 @@ class EnrichedSpecialEnv : public SpecialEnv {
   Status DeleteFile(const std::string& fname) override {
     if (IsWAL(fname)) {
       deleted_wal_cnt++;
-      InstrumentedMutexLock l(&env_mutex_);
+      InstrumentedMutexLock l(&env_mutex_, __func__, __LINE__, nullptr);
       // If this is the first WAL, remember its name and skip deleting it. We
       // remember its name partly because the application might attempt to
       // delete the file again.

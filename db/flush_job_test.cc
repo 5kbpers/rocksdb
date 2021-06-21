@@ -128,7 +128,7 @@ TEST_F(FlushJobTest, Empty) {
                      true /* sync_output_directory */,
                      true /* write_manifest */, Env::Priority::USER);
   {
-    InstrumentedMutexLock l(&mutex_);
+    InstrumentedMutexLock l(&mutex_, __func__, __LINE__, nullptr);
     flush_job.PickMemTable();
     ASSERT_OK(flush_job.Run());
   }
@@ -178,10 +178,10 @@ TEST_F(FlushJobTest, NonEmpty) {
 
   HistogramData hist;
   FileMetaData file_meta;
-  mutex_.Lock();
+  mutex_.Lock(__func__, __LINE__);
   flush_job.PickMemTable();
   ASSERT_OK(flush_job.Run(nullptr, &file_meta));
-  mutex_.Unlock();
+  mutex_.Unlock(nullptr);
   db_options_.statistics->histogramData(FLUSH_TIME, &hist);
   ASSERT_GT(hist.average, 0.0);
 
@@ -241,10 +241,10 @@ TEST_F(FlushJobTest, FlushMemTablesSingleColumnFamily) {
                      true /* write_manifest */, Env::Priority::USER);
   HistogramData hist;
   FileMetaData file_meta;
-  mutex_.Lock();
+  mutex_.Lock(__func__, __LINE__);
   flush_job.PickMemTable();
   ASSERT_OK(flush_job.Run(nullptr /* prep_tracker */, &file_meta));
-  mutex_.Unlock();
+  mutex_.Unlock(nullptr);
   db_options_.statistics->histogramData(FLUSH_TIME, &hist);
   ASSERT_GT(hist.average, 0.0);
 
@@ -316,7 +316,7 @@ TEST_F(FlushJobTest, FlushMemtablesMultipleColumnFamilies) {
   std::vector<FileMetaData> file_metas;
   // Call reserve to avoid auto-resizing
   file_metas.reserve(flush_jobs.size());
-  mutex_.Lock();
+  mutex_.Lock(__func__, __LINE__);
   for (auto& job : flush_jobs) {
     job->PickMemTable();
   }
@@ -346,7 +346,7 @@ TEST_F(FlushJobTest, FlushMemtablesMultipleColumnFamilies) {
       nullptr /* db_directory */, nullptr /* log_buffer */);
   ASSERT_OK(s);
 
-  mutex_.Unlock();
+  mutex_.Unlock(nullptr);
   db_options_.statistics->histogramData(FLUSH_TIME, &hist);
   ASSERT_GT(hist.average, 0.0);
   k = 0;
@@ -426,10 +426,10 @@ TEST_F(FlushJobTest, Snapshots) {
                      kNoCompression, db_options_.statistics.get(),
                      &event_logger, true, true /* sync_output_directory */,
                      true /* write_manifest */, Env::Priority::USER);
-  mutex_.Lock();
+  mutex_.Lock(__func__, __LINE__);
   flush_job.PickMemTable();
   ASSERT_OK(flush_job.Run());
-  mutex_.Unlock();
+  mutex_.Unlock(nullptr);
   mock_table_factory_->AssertSingleFile(inserted_keys);
   HistogramData hist;
   db_options_.statistics->histogramData(FLUSH_TIME, &hist);

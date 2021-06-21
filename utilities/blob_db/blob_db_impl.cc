@@ -1295,7 +1295,7 @@ bool BlobDBImpl::VisibleToActiveSnapshot(
   SequenceNumber oldest_snapshot = kMaxSequenceNumber;
   {
     // Need to lock DBImpl mutex before access snapshot list.
-    InstrumentedMutexLock l(db_impl_->mutex());
+    InstrumentedMutexLock l(db_impl_->mutex(), __func__, __LINE__, db_options_.info_log.get());
     auto& snapshots = db_impl_->snapshots();
     if (!snapshots.empty()) {
       oldest_snapshot = snapshots.oldest()->GetSequenceNumber();

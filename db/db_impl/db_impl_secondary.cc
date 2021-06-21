@@ -323,7 +323,7 @@ Status DBImplSecondary::GetImpl(const ReadOptions& read_options,
   auto cfh = static_cast<ColumnFamilyHandleImpl*>(column_family);
   ColumnFamilyData* cfd = cfh->cfd();
   if (tracer_) {
-    InstrumentedMutexLock lock(&trace_mutex_);
+    InstrumentedMutexLock lock(&trace_mutex_, __func__, __LINE__, nullptr);
     if (tracer_) {
       tracer_->Get(column_family, key);
     }
@@ -497,7 +497,7 @@ Status DBImplSecondary::TryCatchUpWithPrimary() {
   // read the manifest and apply new changes to the secondary instance
   std::unordered_set<ColumnFamilyData*> cfds_changed;
   JobContext job_context(0, true /*create_superversion*/);
-  InstrumentedMutexLock lock_guard(&mutex_);
+  InstrumentedMutexLock lock_guard(&mutex_, __func__, __LINE__, immutable_db_options_.info_log.get());
   s = static_cast<ReactiveVersionSet*>(versions_.get())
           ->ReadAndApply(&mutex_, &manifest_reader_, &cfds_changed);
 
@@ -591,7 +591,7 @@ Status DB::OpenAsSecondary(
   impl->wal_in_db_path_ =
       IsWalDirSameAsDBPath(&impl->immutable_db_options_);
 
-  impl->mutex_.Lock();
+  impl->mutex_.Lock(__func__, __LINE__);
   s = impl->Recover(column_families, true, false, false);
   if (s.ok()) {
     for (auto cf : column_families) {
@@ -611,7 +611,7 @@ Status DB::OpenAsSecondary(
       cfd->InstallSuperVersion(&sv_context, &impl->mutex_);
     }
   }
-  impl->mutex_.Unlock();
+  impl->mutex_.Unlock(impl->immutable_db_options_.info_log.get());
   sv_context.Clean();
   if (s.ok()) {
     *dbptr = impl;

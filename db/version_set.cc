@@ -3673,7 +3673,7 @@ Status VersionSet::ProcessManifestWrites(
 
   {
     EnvOptions opt_env_opts = env_->OptimizeForManifestWrite(env_options_);
-    mu->Unlock();
+    mu->Unlock(nullptr);
 
     TEST_SYNC_POINT("VersionSet::LogAndApply:WriteManifest");
     if (!first_writer.edit_list.front()->IsColumnFamilyManipulation()) {
@@ -3779,7 +3779,7 @@ Status VersionSet::ProcessManifestWrites(
 
     LogFlush(db_options_->info_log);
     TEST_SYNC_POINT("VersionSet::LogAndApply:WriteManifestDone");
-    mu->Lock();
+    mu->Lock(__func__, __LINE__);
   }
 
   // Append the old manifest file to the obsolete_manifest_ list to be deleted
@@ -4619,7 +4619,7 @@ Status VersionSet::ReduceNumberOfLevels(const std::string& dbname,
   MutableCFOptions mutable_cf_options(*options);
   VersionEdit ve;
   InstrumentedMutex dummy_mutex;
-  InstrumentedMutexLock l(&dummy_mutex);
+  InstrumentedMutexLock l(&dummy_mutex, __func__, __LINE__, db_options.info_log.get());
   return versions.LogAndApply(
       versions.GetColumnFamilySet()->GetDefault(),
       mutable_cf_options, &ve, &dummy_mutex, nullptr, true);

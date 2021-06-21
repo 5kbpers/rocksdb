@@ -131,9 +131,9 @@ void ErrorHandler::CancelErrorRecovery() {
       db_options_.sst_file_manager.get());
   if (sfm) {
     // This may or may not cancel a pending recovery
-    db_mutex_->Unlock();
+    db_mutex_->Unlock(db_options_.info_log.get());
     bool cancelled = sfm->CancelErrorRecovery(this);
-    db_mutex_->Lock();
+    db_mutex_->Lock(__func__, __LINE__);
     if (cancelled) {
       recovery_in_prog_ = false;
     }
@@ -307,7 +307,7 @@ Status ErrorHandler::ClearBGError() {
 
 Status ErrorHandler::RecoverFromBGError(bool is_manual) {
 #ifndef ROCKSDB_LITE
-  InstrumentedMutexLock l(db_mutex_);
+  InstrumentedMutexLock l(db_mutex_, __func__, __LINE__, db_options_.info_log.get());
   if (is_manual) {
     // If its a manual recovery and there's a background recovery in progress
     // return busy status

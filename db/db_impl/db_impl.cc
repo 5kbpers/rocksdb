@@ -262,7 +262,7 @@ DBImpl::DBImpl(const DBOptions& options, const std::string& dbname,
 Status DBImpl::Resume() {
   ROCKS_LOG_INFO(immutable_db_options_.info_log, "Resuming DB");
 
-  InstrumentedMutexLock db_mutex(&mutex_);
+  InstrumentedMutexLock db_mutex(&mutex_, __func__, __LINE__, immutable_db_options_.info_log.get());
 
   if (!error_handler_.IsDBStopped() && !error_handler_.IsBGWorkStopped()) {
     // Nothing to do
@@ -274,9 +274,9 @@ Status DBImpl::Resume() {
     return Status::Busy();
   }
 
-  mutex_.Unlock();
+  mutex_.Unlock(immutable_db_options_.info_log.get());
   Status s = error_handler_.RecoverFromBGError(true);
-  mutex_.Lock();
+  mutex_.Lock(__func__, __LINE__);
   return s;
 }
 
@@ -319,18 +319,18 @@ Status DBImpl::ResumeImpl() {
     if (immutable_db_options_.atomic_flush) {
       autovector<ColumnFamilyData*> cfds;
       SelectColumnFamiliesForAtomicFlush(&cfds);
-      mutex_.Unlock();
+      mutex_.Unlock(immutable_db_options_.info_log.get());
       s = AtomicFlushMemTables(cfds, flush_opts, FlushReason::kErrorRecovery);
-      mutex_.Lock();
+      mutex_.Lock(__func__, __LINE__);
     } else {
       for (auto cfd : *versions_->GetColumnFamilySet()) {
         if (cfd->IsDropped()) {
           continue;
         }
         cfd->Ref();
-        mutex_.Unlock();
+        mutex_.Unlock(immutable_db_options_.info_log.get());
         s = FlushMemTable(cfd, flush_opts, FlushReason::kErrorRecovery);
-        mutex_.Lock();
+        mutex_.Lock(__func__, __LINE__);
         cfd->Unref();
         if (!s.ok()) {
           break;
@@ -349,7 +349,7 @@ Status DBImpl::ResumeImpl() {
   if (s.ok()) {
     s = error_handler_.ClearBGError();
   }
-  mutex_.Unlock();
+  mutex_.Unlock(immutable_db_options_.info_log.get());
 
   job_context.manifest_file_number = 1;
   if (job_context.HaveSomethingToDelete()) {
@@ -360,7 +360,7 @@ Status DBImpl::ResumeImpl() {
   if (s.ok()) {
     ROCKS_LOG_INFO(immutable_db_options_.info_log, "Successfully resumed DB");
   }
-  mutex_.Lock();
+  mutex_.Lock(__func__, __LINE__);
   // Check for shutdown again before scheduling further compactions,
   // since we released and re-acquired the lock above
   if (shutdown_initiated_) {
@@ -402,23 +402,23 @@ void DBImpl::CancelAllBackgroundWork(bool wait) {
     thread_persist_stats_->cancel();
     thread_persist_stats_.reset();
   }
-  InstrumentedMutexLock l(&mutex_);
+  InstrumentedMutexLock l(&mutex_, __func__, __LINE__, immutable_db_options_.info_log.get());;
   if (!shutting_down_.load(std::memory_order_acquire) &&
       has_unpersisted_data_.load(std::memory_order_relaxed) &&
       !mutable_db_options_.avoid_flush_during_shutdown) {
     if (immutable_db_options_.atomic_flush) {
       autovector<ColumnFamilyData*> cfds;
       SelectColumnFamiliesForAtomicFlush(&cfds);
-      mutex_.Unlock();
+      mutex_.Unlock(immutable_db_options_.info_log.get());
       AtomicFlushMemTables(cfds, FlushOptions(), FlushReason::kShutDown);
-      mutex_.Lock();
+      mutex_.Lock(__func__, __LINE__);
     } else {
       for (auto cfd : *versions_->GetColumnFamilySet()) {
         if (!cfd->IsDropped() && cfd->initialized() && !cfd->mem()->IsEmpty()) {
           cfd->Ref();
-          mutex_.Unlock();
+          mutex_.Unlock(immutable_db_options_.info_log.get());
           FlushMemTable(cfd, FlushOptions(), FlushReason::kShutDown);
-          mutex_.Lock();
+          mutex_.Lock(__func__, __LINE__);
           cfd->Unref();
         }
       }
@@ -437,13 +437,13 @@ void DBImpl::CancelAllBackgroundWork(bool wait) {
 Status DBImpl::CloseHelper() {
   // Guarantee that there is no background error recovery in progress before
   // continuing with the shutdown
-  mutex_.Lock();
+  mutex_.Lock(__func__, __LINE__);
   shutdown_initiated_ = true;
   error_handler_.CancelErrorRecovery();
   while (error_handler_.IsRecoveryInProgress()) {
     bg_cv_.Wait();
   }
-  mutex_.Unlock();
+  mutex_.Unlock(immutable_db_options_.info_log.get());
 
   // CancelAllBackgroundWork called with false means we just set the shutdown
   // marker. After this we do a variant of the waiting and unschedule work
@@ -454,7 +454,7 @@ Status DBImpl::CloseHelper() {
   int compactions_unscheduled = env_->UnSchedule(this, Env::Priority::LOW);
   int flushes_unscheduled = env_->UnSchedule(this, Env::Priority::HIGH);
   Status ret;
-  mutex_.Lock();
+  mutex_.Lock(__func__, __LINE__);
   bg_bottom_compaction_scheduled_ -= bottom_compactions_unscheduled;
   bg_compaction_scheduled_ -= compactions_unscheduled;
   bg_flush_scheduled_ -= flushes_unscheduled;
@@ -490,7 +490,7 @@ Status DBImpl::CloseHelper() {
 
   if (default_cf_handle_ != nullptr || persist_stats_cf_handle_ != nullptr) {
     // we need to delete handle outside of lock because it does its own locking
-    mutex_.Unlock();
+    mutex_.Unlock(immutable_db_options_.info_log.get());
     if (default_cf_handle_) {
       delete default_cf_handle_;
       default_cf_handle_ = nullptr;
@@ -499,7 +499,7 @@ Status DBImpl::CloseHelper() {
       delete persist_stats_cf_handle_;
       persist_stats_cf_handle_ = nullptr;
     }
-    mutex_.Lock();
+    mutex_.Lock(__func__, __LINE__);
   }
 
   // Clean up obsolete files due to SuperVersion release.
@@ -515,14 +515,14 @@ Status DBImpl::CloseHelper() {
     JobContext job_context(next_job_id_.fetch_add(1));
     FindObsoleteFiles(&job_context, true);
 
-    mutex_.Unlock();
+    mutex_.Unlock(immutable_db_options_.info_log.get());
     // manifest number starting from 2
     job_context.manifest_file_number = 1;
     if (job_context.HaveSomethingToDelete()) {
       PurgeObsoleteFiles(job_context);
     }
     job_context.Clean();
-    mutex_.Lock();
+    mutex_.Lock(__func__, __LINE__);
   }
 
   for (auto l : logs_to_free_) {
@@ -567,7 +567,7 @@ Status DBImpl::CloseHelper() {
   // versions need to be destroyed before table_cache since it can hold
   // references to table_cache.
   versions_.reset();
-  mutex_.Unlock();
+  mutex_.Unlock(immutable_db_options_.info_log.get());
   if (db_lock_ != nullptr) {
     env_->UnlockFile(db_lock_);
   }
@@ -641,7 +641,7 @@ void DBImpl::StartTimedTasks() {
   unsigned int stats_dump_period_sec = 0;
   unsigned int stats_persist_period_sec = 0;
   {
-    InstrumentedMutexLock l(&mutex_);
+    InstrumentedMutexLock l(&mutex_, __func__, __LINE__, immutable_db_options_.info_log.get());;
     stats_dump_period_sec = mutable_db_options_.stats_dump_period_sec;
     if (stats_dump_period_sec > 0) {
       if (!thread_dump_stats_) {
@@ -691,7 +691,7 @@ void DBImpl::PersistStats() {
   }
   size_t stats_history_size_limit = 0;
   {
-    InstrumentedMutexLock l(&mutex_);
+    InstrumentedMutexLock l(&mutex_, __func__, __LINE__, immutable_db_options_.info_log.get());;
     stats_history_size_limit = mutable_db_options_.stats_history_buffer_size;
   }
 
@@ -739,7 +739,7 @@ void DBImpl::PersistStats() {
     }
     // TODO(Zhongyi): add purging for persisted data
   } else {
-    InstrumentedMutexLock l(&stats_history_mutex_);
+    InstrumentedMutexLock l(&stats_history_mutex_, __func__, __LINE__, nullptr);
     // calculate the delta from last time
     if (stats_slice_initialized_) {
       std::map<std::string, uint64_t> stats_delta;
@@ -786,7 +786,7 @@ bool DBImpl::FindStatsByTime(uint64_t start_time, uint64_t end_time,
   if (!new_time || !stats_map) return false;
   // lock when search for start_time
   {
-    InstrumentedMutexLock l(&stats_history_mutex_);
+    InstrumentedMutexLock l(&stats_history_mutex_, __func__, __LINE__, nullptr);
     auto it = stats_history_.lower_bound(start_time);
     if (it != stats_history_.end() && it->first < end_time) {
       // make a copy for timestamp and stats_map
@@ -830,7 +830,7 @@ void DBImpl::DumpStats() {
     return;
   }
   {
-    InstrumentedMutexLock l(&mutex_);
+    InstrumentedMutexLock l(&mutex_, __func__, __LINE__, immutable_db_options_.info_log.get());;
     default_cf_internal_stats_->GetStringProperty(
         *db_property_info, DB::Properties::kDBStats, &stats);
     for (auto cfd : *versions_->GetColumnFamilySet()) {
@@ -905,7 +905,7 @@ Status DBImpl::SetOptions(
   SuperVersionContext sv_context(/* create_superversion */ true);
   {
     auto db_options = GetDBOptions();
-    InstrumentedMutexLock l(&mutex_);
+    InstrumentedMutexLock l(&mutex_, __func__, __LINE__, immutable_db_options_.info_log.get());;
     s = cfd->SetOptions(db_options, options_map);
     if (s.ok()) {
       new_options = *cfd->GetLatestMutableCFOptions();
@@ -966,7 +966,7 @@ Status DBImpl::SetDBOptions(
   bool wal_changed = false;
   WriteContext write_context;
   {
-    InstrumentedMutexLock l(&mutex_);
+    InstrumentedMutexLock l(&mutex_, __func__, __LINE__, immutable_db_options_.info_log.get());;
     s = GetMutableDBOptionsFromStrings(mutable_db_options_, options_map,
                                        &new_options);
     if (new_options.bytes_per_sync == 0) {
@@ -1022,9 +1022,9 @@ Status DBImpl::SetDBOptions(
       if (new_options.stats_dump_period_sec !=
           mutable_db_options_.stats_dump_period_sec) {
         if (thread_dump_stats_) {
-          mutex_.Unlock();
+          mutex_.Unlock(immutable_db_options_.info_log.get());
           thread_dump_stats_->cancel();
-          mutex_.Lock();
+          mutex_.Lock(__func__, __LINE__);
         }
         if (new_options.stats_dump_period_sec > 0) {
           thread_dump_stats_.reset(new rocksdb::RepeatableThread(
@@ -1038,9 +1038,9 @@ Status DBImpl::SetDBOptions(
       if (new_options.stats_persist_period_sec !=
           mutable_db_options_.stats_persist_period_sec) {
         if (thread_persist_stats_) {
-          mutex_.Unlock();
+          mutex_.Unlock(immutable_db_options_.info_log.get());
           thread_persist_stats_->cancel();
-          mutex_.Lock();
+          mutex_.Lock(__func__, __LINE__);
         }
         if (new_options.stats_persist_period_sec > 0) {
           thread_persist_stats_.reset(new rocksdb::RepeatableThread(
@@ -1134,7 +1134,7 @@ Status DBImpl::FlushWAL(bool sync) {
     Status s;
     {
       // We need to lock log_write_mutex_ since logs_ might change concurrently
-      InstrumentedMutexLock wl(&log_write_mutex_);
+      InstrumentedMutexLock wl(&log_write_mutex_, __func__, __LINE__, nullptr);
       log::Writer* cur_log_writer = logs_.back().writer;
       s = cur_log_writer->WriteBuffer();
     }
@@ -1166,7 +1166,7 @@ Status DBImpl::SyncWAL() {
   uint64_t current_log_number;
 
   {
-    InstrumentedMutexLock l(&mutex_);
+    InstrumentedMutexLock l(&mutex_, __func__, __LINE__, immutable_db_options_.info_log.get());;
     assert(!logs_.empty());
 
     // This SyncWAL() call only cares about logs up to this number.
@@ -1214,7 +1214,7 @@ Status DBImpl::SyncWAL() {
 
   TEST_SYNC_POINT("DBImpl::SyncWAL:BeforeMarkLogsSynced:1");
   {
-    InstrumentedMutexLock l(&mutex_);
+    InstrumentedMutexLock l(&mutex_, __func__, __LINE__, immutable_db_options_.info_log.get());;
     MarkLogsSynced(current_log_number, need_log_dir_sync, status);
   }
   TEST_SYNC_POINT("DBImpl::SyncWAL:BeforeMarkLogsSynced:2");
@@ -1223,7 +1223,7 @@ Status DBImpl::SyncWAL() {
 }
 
 Status DBImpl::LockWAL() {
-  log_write_mutex_.Lock();
+  log_write_mutex_.Lock(__func__, __LINE__);
   auto cur_log_writer = logs_.back().writer;
   auto status = cur_log_writer->WriteBuffer();
   if (!status.ok()) {
@@ -1237,7 +1237,7 @@ Status DBImpl::LockWAL() {
 }
 
 Status DBImpl::UnlockWAL() {
-  log_write_mutex_.Unlock();
+  log_write_mutex_.Unlock(immutable_db_options_.info_log.get());
   return Status::OK();
 }
 
@@ -1253,7 +1253,7 @@ void DBImpl::MarkLogsSynced(uint64_t up_to, bool synced_dir,
     if (status.ok() && logs_.size() > 1) {
       logs_to_free_.push_back(log.ReleaseWriter());
       // To modify logs_ both mutex_ and log_write_mutex_ must be held
-      InstrumentedMutexLock l(&log_write_mutex_);
+      InstrumentedMutexLock l(&log_write_mutex_, __func__, __LINE__, nullptr);
       it = logs_.erase(it);
     } else {
       log.getting_synced = false;
@@ -1293,9 +1293,9 @@ InternalIterator* DBImpl::NewInternalIterator(
     cfd = cfh->cfd();
   }
 
-  mutex_.Lock();
+  mutex_.Lock(__func__, __LINE__);
   SuperVersion* super_version = cfd->GetSuperVersion()->Ref();
-  mutex_.Unlock();
+  mutex_.Unlock(immutable_db_options_.info_log.get());
   ReadOptions roptions;
   return NewInternalIterator(roptions, cfd, super_version, arena, range_del_agg,
                              sequence);
@@ -1311,15 +1311,15 @@ void DBImpl::SchedulePurge() {
 }
 
 void DBImpl::BackgroundCallPurge() {
-  mutex_.Lock();
+  mutex_.Lock(__func__, __LINE__);
 
   while (!logs_to_free_queue_.empty()) {
     assert(!logs_to_free_queue_.empty());
     log::Writer* log_writer = *(logs_to_free_queue_.begin());
     logs_to_free_queue_.pop_front();
-    mutex_.Unlock();
+    mutex_.Unlock(immutable_db_options_.info_log.get());
     delete log_writer;
-    mutex_.Lock();
+    mutex_.Lock(__func__, __LINE__);
   }
   for (const auto& file : purge_files_) {
     const PurgeFileInfo& purge_file = file.second;
@@ -1329,9 +1329,9 @@ void DBImpl::BackgroundCallPurge() {
     uint64_t number = purge_file.number;
     int job_id = purge_file.job_id;
 
-    mutex_.Unlock();
+    mutex_.Unlock(immutable_db_options_.info_log.get());
     DeleteObsoleteFileImpl(job_id, fname, dir_to_sync, type, number);
-    mutex_.Lock();
+    mutex_.Lock(__func__, __LINE__);
   }
   purge_files_.clear();
 
@@ -1342,7 +1342,7 @@ void DBImpl::BackgroundCallPurge() {
   // signal the DB destructor that it's OK to proceed with destruction. In
   // that case, all DB variables will be dealloacated and referencing them
   // will cause trouble.
-  mutex_.Unlock();
+  mutex_.Unlock(immutable_db_options_.info_log.get());
 }
 
 namespace {
@@ -1368,13 +1368,13 @@ static void CleanupIteratorState(void* arg1, void* /*arg2*/) {
     // user thread
     JobContext job_context(0);
 
-    state->mu->Lock();
+    state->mu->Lock(__func__, __LINE__);
     state->super_version->Cleanup();
     state->db->FindObsoleteFiles(&job_context, false, true);
     if (state->background_purge) {
       state->db->ScheduleBgLogWriterClose(&job_context);
     }
-    state->mu->Unlock();
+    state->mu->Unlock(state->db->immutable_db_options().info_log.get());
 
     delete state->super_version;
     if (job_context.HaveSomethingToDelete()) {
@@ -1383,9 +1383,9 @@ static void CleanupIteratorState(void* arg1, void* /*arg2*/) {
         // files to be deleted to a job queue, and deletes it in a separate
         // background thread.
         state->db->PurgeObsoleteFiles(job_context, true /* schedule only */);
-        state->mu->Lock();
+        state->mu->Lock(__func__, __LINE__);
         state->db->SchedulePurge();
-        state->mu->Unlock();
+        state->mu->Unlock(state->db->immutable_db_options().info_log.get());
       } else {
         state->db->PurgeObsoleteFiles(job_context);
       }
@@ -1479,7 +1479,7 @@ Status DBImpl::GetImpl(const ReadOptions& read_options,
   if (tracer_) {
     // TODO: This mutex should be removed later, to improve performance when
     // tracing is enabled.
-    InstrumentedMutexLock lock(&trace_mutex_);
+    InstrumentedMutexLock lock(&trace_mutex_, __func__, __LINE__, immutable_db_options_.info_log.get());
     if (tracer_) {
       tracer_->Get(column_family, key);
     }
@@ -1645,7 +1645,7 @@ std::vector<Status> DBImpl::MultiGet(
           TEST_SYNC_POINT("DBImpl::MultiGet::LastTry");
           // We're close to max number of retries. For the last retry,
           // acquire the lock so we're sure to succeed
-          mutex_.Lock();
+          mutex_.Lock(__func__, __LINE__);
         }
         snapshot = last_seq_same_as_publish_seq_
                        ? versions_->LastSequence()
@@ -1687,7 +1687,7 @@ std::vector<Status> DBImpl::MultiGet(
       }
       if (!retry) {
         if (last_try) {
-          mutex_.Unlock();
+          mutex_.Unlock(immutable_db_options_.info_log.get());
         }
         break;
       }
@@ -2070,7 +2070,7 @@ Status DBImpl::CreateColumnFamilyImpl(const ColumnFamilyOptions& cf_options,
 
   SuperVersionContext sv_context(/* create_superversion */ true);
   {
-    InstrumentedMutexLock l(&mutex_);
+    InstrumentedMutexLock l(&mutex_, __func__, __LINE__, immutable_db_options_.info_log.get());;
 
     if (versions_->GetColumnFamilySet()->GetColumnFamily(column_family_name) !=
         nullptr) {
@@ -2124,7 +2124,7 @@ Status DBImpl::CreateColumnFamilyImpl(const ColumnFamilyOptions& cf_options,
                       "Creating column family [%s] FAILED -- %s",
                       column_family_name.c_str(), s.ToString().c_str());
     }
-  }  // InstrumentedMutexLock l(&mutex_)
+  }  // InstrumentedMutexLock l(&mutex_, __func__, __LINE__, immutable_db_options_.info_log.get());
 
   sv_context.Clean();
   // this is outside the mutex
@@ -2181,7 +2181,7 @@ Status DBImpl::DropColumnFamilyImpl(ColumnFamilyHandle* column_family) {
 
   Status s;
   {
-    InstrumentedMutexLock l(&mutex_);
+    InstrumentedMutexLock l(&mutex_, __func__, __LINE__, immutable_db_options_.info_log.get());;
     if (cfd->IsDropped()) {
       s = Status::InvalidArgument("Column family already dropped!\n");
     }
@@ -2427,12 +2427,12 @@ SnapshotImpl* DBImpl::GetSnapshotImpl(bool is_write_conflict_boundary,
   SnapshotImpl* s = new SnapshotImpl;
 
   if (lock) {
-    mutex_.Lock();
+    mutex_.Lock(__func__, __LINE__);
   }
   // returns null if the underlying memtable does not support snapshot.
   if (!is_snapshot_supported_) {
     if (lock) {
-      mutex_.Unlock();
+      mutex_.Unlock(immutable_db_options_.info_log.get());
     }
     delete s;
     return nullptr;
@@ -2443,7 +2443,7 @@ SnapshotImpl* DBImpl::GetSnapshotImpl(bool is_write_conflict_boundary,
   SnapshotImpl* snapshot =
       snapshots_.New(s, snapshot_seq, unix_time, is_write_conflict_boundary);
   if (lock) {
-    mutex_.Unlock();
+    mutex_.Unlock(immutable_db_options_.info_log.get());
   }
   return snapshot;
 }
@@ -2463,7 +2463,7 @@ bool CfdListContains(const CfdList& list, ColumnFamilyData* cfd) {
 void DBImpl::ReleaseSnapshot(const Snapshot* s) {
   const SnapshotImpl* casted_s = reinterpret_cast<const SnapshotImpl*>(s);
   {
-    InstrumentedMutexLock l(&mutex_);
+    InstrumentedMutexLock l(&mutex_, __func__, __LINE__, immutable_db_options_.info_log.get());;
     snapshots_.Delete(casted_s);
     uint64_t oldest_snapshot;
     if (snapshots_.empty()) {
@@ -2514,17 +2514,17 @@ Status DBImpl::GetPropertiesOfAllTables(ColumnFamilyHandle* column_family,
   auto cfd = cfh->cfd();
 
   // Increment the ref count
-  mutex_.Lock();
+  mutex_.Lock(__func__, __LINE__);
   auto version = cfd->current();
   version->Ref();
-  mutex_.Unlock();
+  mutex_.Unlock(immutable_db_options_.info_log.get());
 
   auto s = version->GetPropertiesOfAllTables(props);
 
   // Decrement the ref count
-  mutex_.Lock();
+  mutex_.Lock(__func__, __LINE__);
   version->Unref();
-  mutex_.Unlock();
+  mutex_.Unlock(immutable_db_options_.info_log.get());
 
   return s;
 }
@@ -2536,17 +2536,17 @@ Status DBImpl::GetPropertiesOfTablesInRange(ColumnFamilyHandle* column_family,
   auto cfd = cfh->cfd();
 
   // Increment the ref count
-  mutex_.Lock();
+  mutex_.Lock(__func__, __LINE__);
   auto version = cfd->current();
   version->Ref();
-  mutex_.Unlock();
+  mutex_.Unlock(immutable_db_options_.info_log.get());
 
   auto s = version->GetPropertiesOfTablesInRange(range, n, props);
 
   // Decrement the ref count
-  mutex_.Lock();
+  mutex_.Lock(__func__, __LINE__);
   version->Unref();
-  mutex_.Unlock();
+  mutex_.Unlock(immutable_db_options_.info_log.get());
 
   return s;
 }
@@ -2558,14 +2558,14 @@ const std::string& DBImpl::GetName() const { return dbname_; }
 Env* DBImpl::GetEnv() const { return env_; }
 
 Options DBImpl::GetOptions(ColumnFamilyHandle* column_family) const {
-  InstrumentedMutexLock l(&mutex_);
+  InstrumentedMutexLock l(&mutex_, __func__, __LINE__, immutable_db_options_.info_log.get());;
   auto cfh = reinterpret_cast<ColumnFamilyHandleImpl*>(column_family);
   return Options(BuildDBOptions(immutable_db_options_, mutable_db_options_),
                  cfh->cfd()->GetLatestCFOptions());
 }
 
 DBOptions DBImpl::GetDBOptions() const {
-  InstrumentedMutexLock l(&mutex_);
+  InstrumentedMutexLock l(&mutex_, __func__, __LINE__, immutable_db_options_.info_log.get());;
   return BuildDBOptions(immutable_db_options_, mutable_db_options_);
 }
 
@@ -2585,7 +2585,7 @@ bool DBImpl::GetProperty(ColumnFamilyHandle* column_family,
     }
     return ret_value;
   } else if (property_info->handle_string) {
-    InstrumentedMutexLock l(&mutex_);
+    InstrumentedMutexLock l(&mutex_, __func__, __LINE__, immutable_db_options_.info_log.get());;
     return cfd->internal_stats()->GetStringProperty(*property_info, property,
                                                     value);
   } else if (property_info->handle_string_dbimpl) {
@@ -2611,7 +2611,7 @@ bool DBImpl::GetMapProperty(ColumnFamilyHandle* column_family,
   if (property_info == nullptr) {
     return false;
   } else if (property_info->handle_map) {
-    InstrumentedMutexLock l(&mutex_);
+    InstrumentedMutexLock l(&mutex_, __func__, __LINE__, immutable_db_options_.info_log.get());;
     return cfd->internal_stats()->GetMapProperty(*property_info, property,
                                                  value);
   }
@@ -2639,7 +2639,7 @@ bool DBImpl::GetIntPropertyInternal(ColumnFamilyData* cfd,
       mutex_.AssertHeld();
       return cfd->internal_stats()->GetIntProperty(property_info, value, this);
     } else {
-      InstrumentedMutexLock l(&mutex_);
+      InstrumentedMutexLock l(&mutex_, __func__, __LINE__, immutable_db_options_.info_log.get());;
       return cfd->internal_stats()->GetIntProperty(property_info, value, this);
     }
   } else {
@@ -2673,7 +2673,7 @@ bool DBImpl::GetPropertyHandleOptionsStatistics(std::string* value) {
 
 #ifndef ROCKSDB_LITE
 Status DBImpl::ResetStats() {
-  InstrumentedMutexLock l(&mutex_);
+  InstrumentedMutexLock l(&mutex_, __func__, __LINE__, immutable_db_options_.info_log.get());;
   for (auto* cfd : *versions_->GetColumnFamilySet()) {
     if (cfd->initialized()) {
       cfd->internal_stats()->Clear();
@@ -2693,7 +2693,7 @@ bool DBImpl::GetAggregatedIntProperty(const Slice& property,
   uint64_t sum = 0;
   {
     // Needs mutex to protect the list of column families.
-    InstrumentedMutexLock l(&mutex_);
+    InstrumentedMutexLock l(&mutex_, __func__, __LINE__, immutable_db_options_.info_log.get());;
     uint64_t value;
     for (auto* cfd : *versions_->GetColumnFamilySet()) {
       if (!cfd->initialized()) {
@@ -2731,7 +2731,7 @@ void DBImpl::CleanupSuperVersion(SuperVersion* sv) {
   // Release SuperVersion
   if (sv->Unref()) {
     {
-      InstrumentedMutexLock l(&mutex_);
+      InstrumentedMutexLock l(&mutex_, __func__, __LINE__, immutable_db_options_.info_log.get());;
       sv->Cleanup();
     }
     delete sv;
@@ -2774,7 +2774,7 @@ ColumnFamilyHandle* DBImpl::GetColumnFamilyHandle(uint32_t column_family_id) {
 // REQUIRED: mutex is NOT held.
 std::unique_ptr<ColumnFamilyHandle> DBImpl::GetColumnFamilyHandleUnlocked(
     uint32_t column_family_id) {
-  InstrumentedMutexLock l(&mutex_);
+  InstrumentedMutexLock l(&mutex_, __func__, __LINE__, immutable_db_options_.info_log.get());;
 
   auto* cfd =
       versions_->GetColumnFamilySet()->GetColumnFamily(column_family_id);
@@ -2903,7 +2903,7 @@ Status DBImpl::DeleteFile(std::string name) {
   VersionEdit edit;
   JobContext job_context(next_job_id_.fetch_add(1), true);
   {
-    InstrumentedMutexLock l(&mutex_);
+    InstrumentedMutexLock l(&mutex_, __func__, __LINE__, immutable_db_options_.info_log.get());;
     status = versions_->GetMetadataForFile(number, &level, &metadata, &cfd);
     if (!status.ok()) {
       ROCKS_LOG_WARN(immutable_db_options_.info_log,
@@ -2977,7 +2977,7 @@ Status DBImpl::DeleteFilesInRanges(ColumnFamilyHandle* column_family,
   std::set<FileMetaData*> deleted_files;
   JobContext job_context(next_job_id_.fetch_add(1), true);
   {
-    InstrumentedMutexLock l(&mutex_);
+    InstrumentedMutexLock l(&mutex_, __func__, __LINE__, immutable_db_options_.info_log.get());;
     Version* input_version = cfd->current();
 
     auto* vstorage = input_version->storage_info();
@@ -3057,7 +3057,7 @@ Status DBImpl::DeleteFilesInRanges(ColumnFamilyHandle* column_family,
 }
 
 void DBImpl::GetLiveFilesMetaData(std::vector<LiveFileMetaData>* metadata) {
-  InstrumentedMutexLock l(&mutex_);
+  InstrumentedMutexLock l(&mutex_, __func__, __LINE__, immutable_db_options_.info_log.get());;
   versions_->GetLiveFilesMetaData(metadata);
 }
 
@@ -3181,7 +3181,7 @@ DB::~DB() {}
 Status DBImpl::Close() {
   if (!closed_) {
     {
-      InstrumentedMutexLock l(&mutex_);
+      InstrumentedMutexLock l(&mutex_, __func__, __LINE__, immutable_db_options_.info_log.get());;
       // If there is unreleased snapshot, fail the close call
       if (!snapshots_.empty()) {
         return Status::Aborted("Cannot close DB with unreleased snapshot.");
@@ -3332,7 +3332,7 @@ Status DBImpl::WriteOptionsFile(bool need_mutex_lock,
 #ifndef ROCKSDB_LITE
   WriteThread::Writer w;
   if (need_mutex_lock) {
-    mutex_.Lock();
+    mutex_.Lock(__func__, __LINE__);
   } else {
     mutex_.AssertHeld();
   }
@@ -3356,7 +3356,7 @@ Status DBImpl::WriteOptionsFile(bool need_mutex_lock,
   // because the single write thread ensures all new writes get queued.
   DBOptions db_options =
       BuildDBOptions(immutable_db_options_, mutable_db_options_);
-  mutex_.Unlock();
+  mutex_.Unlock(immutable_db_options_.info_log.get());
 
   TEST_SYNC_POINT("DBImpl::WriteOptionsFile:1");
   TEST_SYNC_POINT("DBImpl::WriteOptionsFile:2");
@@ -3371,7 +3371,7 @@ Status DBImpl::WriteOptionsFile(bool need_mutex_lock,
   }
   // restore lock
   if (!need_mutex_lock) {
-    mutex_.Lock();
+    mutex_.Lock(__func__, __LINE__);
   }
   if (need_enter_write_thread) {
     write_thread_.ExitUnbatched(&w);
@@ -3452,7 +3452,7 @@ Status DBImpl::RenameTempFileToOptionsFile(const std::string& file_name) {
   // Retry if the file name happen to conflict with an existing one.
   s = GetEnv()->RenameFile(file_name, options_file_name);
   if (s.ok()) {
-    InstrumentedMutexLock l(&mutex_);
+    InstrumentedMutexLock l(&mutex_, __func__, __LINE__, immutable_db_options_.info_log.get());;
     versions_->options_file_number_ = options_file_number;
   }
 
@@ -3699,7 +3699,7 @@ Status DBImpl::IngestExternalFiles(
       static_cast<ColumnFamilyHandleImpl*>(args[0].column_family)->cfd(), total,
       &pending_output_elem, &next_file_number);
   if (!status.ok()) {
-    InstrumentedMutexLock l(&mutex_);
+    InstrumentedMutexLock l(&mutex_, __func__, __LINE__, immutable_db_options_.info_log.get());;
     ReleaseFileNumberFromPendingOutputs(pending_output_elem);
     return status;
   }
@@ -3750,7 +3750,7 @@ Status DBImpl::IngestExternalFiles(
         ingestion_jobs[i].Cleanup(status);
       }
     }
-    InstrumentedMutexLock l(&mutex_);
+    InstrumentedMutexLock l(&mutex_, __func__, __LINE__, immutable_db_options_.info_log.get());;
     ReleaseFileNumberFromPendingOutputs(pending_output_elem);
     return status;
   }
@@ -3763,7 +3763,7 @@ Status DBImpl::IngestExternalFiles(
   TEST_SYNC_POINT("DBImpl::IngestExternalFiles:BeforeJobsRun:1");
   TEST_SYNC_POINT("DBImpl::AddFile:Start");
   {
-    InstrumentedMutexLock l(&mutex_);
+    InstrumentedMutexLock l(&mutex_, __func__, __LINE__, immutable_db_options_.info_log.get());;
     TEST_SYNC_POINT("DBImpl::AddFile:MutexLock");
 
     // Stop writes to the DB by entering both write threads
@@ -3813,22 +3813,22 @@ Status DBImpl::IngestExternalFiles(
       if (immutable_db_options_.atomic_flush) {
         autovector<ColumnFamilyData*> cfds_to_flush;
         SelectColumnFamiliesForAtomicFlush(&cfds_to_flush);
-        mutex_.Unlock();
+        mutex_.Unlock(immutable_db_options_.info_log.get());
         status = AtomicFlushMemTables(cfds_to_flush, flush_opts,
                                       FlushReason::kExternalFileIngestion,
                                       true /* writes_stopped */);
-        mutex_.Lock();
+        mutex_.Lock(__func__, __LINE__);
       } else {
         for (size_t i = 0; i != num_cfs; ++i) {
           if (need_flush[i]) {
-            mutex_.Unlock();
+            mutex_.Unlock(immutable_db_options_.info_log.get());
             auto* cfd =
                 static_cast<ColumnFamilyHandleImpl*>(args[i].column_family)
                     ->cfd();
             status = FlushMemTable(cfd, flush_opts,
                                    FlushReason::kExternalFileIngestion,
                                    true /* writes_stopped */);
-            mutex_.Lock();
+            mutex_.Lock(__func__, __LINE__);
             if (!status.ok()) {
               break;
             }
@@ -3980,7 +3980,7 @@ Status DBImpl::CreateColumnFamilyWithImport(
   std::list<uint64_t>::iterator pending_output_elem;
   {
     // Lock db mutex
-    InstrumentedMutexLock l(&mutex_);
+    InstrumentedMutexLock l(&mutex_, __func__, __LINE__, immutable_db_options_.info_log.get());;
     if (error_handler_.IsDBStopped()) {
       // Don't import files when there is a bg_error
       status = error_handler_.GetBGError();
@@ -4016,7 +4016,7 @@ Status DBImpl::CreateColumnFamilyWithImport(
     SuperVersionContext sv_context(true /*create_superversion*/);
     {
       // Lock db mutex
-      InstrumentedMutexLock l(&mutex_);
+      InstrumentedMutexLock l(&mutex_, __func__, __LINE__, immutable_db_options_.info_log.get());;
 
       // Stop writes to the DB by entering both write threads
       WriteThread::Writer w;
@@ -4057,7 +4057,7 @@ Status DBImpl::CreateColumnFamilyWithImport(
   }
 
   {
-    InstrumentedMutexLock l(&mutex_);
+    InstrumentedMutexLock l(&mutex_, __func__, __LINE__, immutable_db_options_.info_log.get());;
     ReleaseFileNumberFromPendingOutputs(pending_output_elem);
   }
 
@@ -4074,7 +4074,7 @@ Status DBImpl::VerifyChecksum() {
   Status s;
   std::vector<ColumnFamilyData*> cfd_list;
   {
-    InstrumentedMutexLock l(&mutex_);
+    InstrumentedMutexLock l(&mutex_, __func__, __LINE__, immutable_db_options_.info_log.get());;
     for (auto cfd : *versions_->GetColumnFamilySet()) {
       if (!cfd->IsDropped() && cfd->initialized()) {
         cfd->Ref();
@@ -4091,7 +4091,7 @@ Status DBImpl::VerifyChecksum() {
     ColumnFamilyData* cfd = sv->current->cfd();
     Options opts;
     {
-      InstrumentedMutexLock l(&mutex_);
+      InstrumentedMutexLock l(&mutex_, __func__, __LINE__, immutable_db_options_.info_log.get());;
       opts = Options(BuildDBOptions(immutable_db_options_, mutable_db_options_),
                      cfd->GetLatestCFOptions());
     }
@@ -4109,7 +4109,7 @@ Status DBImpl::VerifyChecksum() {
     }
   }
   {
-    InstrumentedMutexLock l(&mutex_);
+    InstrumentedMutexLock l(&mutex_, __func__, __LINE__, immutable_db_options_.info_log.get());;
     for (auto sv : sv_list) {
       if (sv && sv->Unref()) {
         sv->Cleanup();
@@ -4151,13 +4151,13 @@ void DBImpl::WaitForIngestFile() {
 
 Status DBImpl::StartTrace(const TraceOptions& trace_options,
                           std::unique_ptr<TraceWriter>&& trace_writer) {
-  InstrumentedMutexLock lock(&trace_mutex_);
+  InstrumentedMutexLock lock(&trace_mutex_, __func__, __LINE__, nullptr);
   tracer_.reset(new Tracer(env_, trace_options, std::move(trace_writer)));
   return Status::OK();
 }
 
 Status DBImpl::EndTrace() {
-  InstrumentedMutexLock lock(&trace_mutex_);
+  InstrumentedMutexLock lock(&trace_mutex_, __func__, __LINE__, nullptr);
   Status s;
   if (tracer_ != nullptr) {
     s = tracer_->Close();
@@ -4183,7 +4183,7 @@ Status DBImpl::EndBlockCacheTrace() {
 Status DBImpl::TraceIteratorSeek(const uint32_t& cf_id, const Slice& key) {
   Status s;
   if (tracer_) {
-    InstrumentedMutexLock lock(&trace_mutex_);
+    InstrumentedMutexLock lock(&trace_mutex_, __func__, __LINE__, nullptr);
     if (tracer_) {
       s = tracer_->IteratorSeek(cf_id, key);
     }
@@ -4195,7 +4195,7 @@ Status DBImpl::TraceIteratorSeekForPrev(const uint32_t& cf_id,
                                         const Slice& key) {
   Status s;
   if (tracer_) {
-    InstrumentedMutexLock lock(&trace_mutex_);
+    InstrumentedMutexLock lock(&trace_mutex_, __func__, __LINE__, nullptr);
     if (tracer_) {
       s = tracer_->IteratorSeekForPrev(cf_id, key);
     }
@@ -4211,7 +4211,7 @@ Status DBImpl::ReserveFileNumbersBeforeIngestion(
   SuperVersionContext dummy_sv_ctx(true /* create_superversion */);
   assert(nullptr != pending_output_elem);
   assert(nullptr != next_file_number);
-  InstrumentedMutexLock l(&mutex_);
+  InstrumentedMutexLock l(&mutex_, __func__, __LINE__, immutable_db_options_.info_log.get());;
   if (error_handler_.IsDBStopped()) {
     // Do not ingest files when there is a bg_error
     return error_handler_.GetBGError();

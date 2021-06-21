@@ -573,7 +573,7 @@ class DBImpl : public DB {
   void LoadSnapshots(std::vector<SequenceNumber>* snap_vector,
                      SequenceNumber* oldest_write_conflict_snapshot,
                      const SequenceNumber& max_seq) const {
-    InstrumentedMutexLock l(mutex());
+    InstrumentedMutexLock l(mutex(), __func__, __LINE__, immutable_db_options_.info_log.get());
     snapshots().GetAll(snap_vector, oldest_write_conflict_snapshot, max_seq);
   }
 
@@ -1366,9 +1366,9 @@ class DBImpl : public DB {
     if (immutable_db_options_.enable_pipelined_write) {
       // Memtable writers may call DB::Get in case max_successive_merges > 0,
       // which may lock mutex. Unlocking mutex here to avoid deadlock.
-      mutex_.Unlock();
+      mutex_.Unlock(immutable_db_options_.info_log.get());
       write_thread_.WaitForMemTableWriters();
-      mutex_.Lock();
+      mutex_.Lock(__func__, __LINE__);
     }
 
     if (!immutable_db_options_.unordered_write) {

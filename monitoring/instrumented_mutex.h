@@ -11,6 +11,7 @@
 #include "rocksdb/statistics.h"
 #include "rocksdb/thread_status.h"
 #include "util/stop_watch.h"
+#include "logging/logging.h"
 
 namespace rocksdb {
 class InstrumentedCondVar;
@@ -29,9 +30,15 @@ class InstrumentedMutex {
       : mutex_(adaptive), stats_(stats), env_(env),
         stats_code_(stats_code) {}
 
-  void Lock();
+  void Lock(std::string func, int line);
 
-  void Unlock() {
+  void Unlock(Logger* info_log) {
+    uint64_t time = env_->NowNanos() - lock_time_nanos_;
+    if (info_log != nullptr && time > 1000 * 100) {
+      ROCKS_LOG_WARN(info_log, ">>>>>> %s line %d db mutex costs %" PRIu64 "us\n", func_.c_str(), line_, time);
+    }
+    func_ = "";
+    line_ = 0;
     mutex_.Unlock();
   }
 
@@ -46,22 +53,26 @@ class InstrumentedMutex {
   Statistics* stats_;
   Env* env_;
   int stats_code_;
+  std::string func_;
+  int line_;
+  uint64_t lock_time_nanos_;
 };
 
 // A wrapper class for port::Mutex that provides additional layer
 // for collecting stats and instrumentation.
 class InstrumentedMutexLock {
  public:
-  explicit InstrumentedMutexLock(InstrumentedMutex* mutex) : mutex_(mutex) {
-    mutex_->Lock();
+  explicit InstrumentedMutexLock(InstrumentedMutex* mutex, std::string func, int line, Logger* info_log) : mutex_(mutex), info_log_(info_log) {
+    mutex_->Lock(func, line);
   }
 
   ~InstrumentedMutexLock() {
-    mutex_->Unlock();
+    mutex_->Unlock(info_log_);
   }
 
  private:
   InstrumentedMutex* const mutex_;
+  Logger* info_log_;
   InstrumentedMutexLock(const InstrumentedMutexLock&) = delete;
   void operator=(const InstrumentedMutexLock&) = delete;
 };

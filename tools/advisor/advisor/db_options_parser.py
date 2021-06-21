@@ -269,7 +269,7 @@ class DatabaseOptions(DataSource):
     def generate_options_config(self, nonce):
         # this method generates a Rocksdb OPTIONS file in the INI format from
         # the options stored in self.options_dict
-        this_path = os.path.abspath(os.path.dirname(__file__))
+        this_path = os.path.abspath(os.path.dirname(__func__))
         file_name = '../temp/OPTIONS_' + str(nonce) + '.tmp'
         file_path = os.path.join(this_path, file_name)
         with open(file_path, 'w') as fp:

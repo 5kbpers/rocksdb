@@ -67,13 +67,13 @@ static const char* GetTempDir(void) {
 
 #define CheckNoError(err)                                               \
   if ((err) != NULL) {                                                  \
-    fprintf(stderr, "%s:%d: %s: %s\n", __FILE__, __LINE__, phase, (err)); \
+    fprintf(stderr, "%s:%d: %s: %s\n", __func__, __LINE__, phase, (err)); \
     abort();                                                            \
   }
 
 #define CheckCondition(cond)                                            \
   if (!(cond)) {                                                        \
-    fprintf(stderr, "%s:%d: %s: %s\n", __FILE__, __LINE__, phase, #cond); \
+    fprintf(stderr, "%s:%d: %s: %s\n", __func__, __LINE__, phase, #cond); \
     abort();                                                            \
   }
 

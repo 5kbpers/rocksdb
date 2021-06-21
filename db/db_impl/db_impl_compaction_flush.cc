@@ -97,7 +97,7 @@ Status DBImpl::SyncClosedLogs(JobContext* job_context) {
 
   Status s;
   if (!logs_to_sync.empty()) {
-    mutex_.Unlock();
+    mutex_.Unlock(immutable_db_options_.info_log.get());
 
     for (log::Writer* log : logs_to_sync) {
       ROCKS_LOG_INFO(immutable_db_options_.info_log,
@@ -119,7 +119,7 @@ Status DBImpl::SyncClosedLogs(JobContext* job_context) {
       s = directories_.GetWalDir()->Fsync();
     }
 
-    mutex_.Lock();
+    mutex_.Lock(__func__, __LINE__);
 
     // "number <= current_log_number - 1" is equivalent to
     // "number < current_log_number".
@@ -567,7 +567,7 @@ void DBImpl::NotifyOnFlushBegin(ColumnFamilyData* cfd, FileMetaData* file_meta,
       (cfd->current()->storage_info()->NumLevelFiles(0) >=
        mutable_cf_options.level0_stop_writes_trigger);
   // release lock while notifying events
-  mutex_.Unlock();
+  mutex_.Unlock(immutable_db_options_.info_log.get());
   {
     FlushJobInfo info;
     info.cf_id = cfd->GetID();
@@ -587,7 +587,7 @@ void DBImpl::NotifyOnFlushBegin(ColumnFamilyData* cfd, FileMetaData* file_meta,
       listener->OnFlushBegin(this, info);
     }
   }
-  mutex_.Lock();
+  mutex_.Lock(__func__, __LINE__);
 // no need to signal bg_cv_ as it will be signaled at the end of the
 // flush process.
 #else
@@ -617,7 +617,7 @@ void DBImpl::NotifyOnFlushCompleted(
       (cfd->current()->storage_info()->NumLevelFiles(0) >=
        mutable_cf_options.level0_stop_writes_trigger);
   // release lock while notifying events
-  mutex_.Unlock();
+  mutex_.Unlock(immutable_db_options_.info_log.get());
   {
     for (auto& info : *flush_jobs_info) {
       info->triggered_writes_slowdown = triggered_writes_slowdown;
@@ -628,7 +628,7 @@ void DBImpl::NotifyOnFlushCompleted(
     }
     flush_jobs_info->clear();
   }
-  mutex_.Lock();
+  mutex_.Lock(__func__, __LINE__);
   // no need to signal bg_cv_ as it will be signaled at the end of the
   // flush process.
 #else
@@ -667,9 +667,9 @@ Status DBImpl::CompactRange(const CompactRangeOptions& options,
     fo.allow_write_stall = options.allow_write_stall;
     if (immutable_db_options_.atomic_flush) {
       autovector<ColumnFamilyData*> cfds;
-      mutex_.Lock();
+      mutex_.Lock(__func__, __LINE__);
       SelectColumnFamiliesForAtomicFlush(&cfds);
-      mutex_.Unlock();
+      mutex_.Unlock(immutable_db_options_.info_log.get());
       s = AtomicFlushMemTables(cfds, fo, FlushReason::kManualCompaction,
                                false /* writes_stopped */);
     } else {
@@ -688,7 +688,7 @@ Status DBImpl::CompactRange(const CompactRangeOptions& options,
   uint64_t max_file_num_to_ignore = port::kMaxUint64;
   uint64_t next_file_number = port::kMaxUint64;
   {
-    InstrumentedMutexLock l(&mutex_);
+    InstrumentedMutexLock l(&mutex_, __func__, __LINE__, immutable_db_options_.info_log.get());
     Version* base = cfd->current();
     for (int level = 1; level < base->storage_info()->num_non_empty_levels();
          level++) {
@@ -779,7 +779,7 @@ Status DBImpl::CompactRange(const CompactRangeOptions& options,
   LogFlush(immutable_db_options_.info_log);
 
   {
-    InstrumentedMutexLock l(&mutex_);
+    InstrumentedMutexLock l(&mutex_, __func__, __LINE__, immutable_db_options_.info_log.get());
     // an automatic compaction that has been scheduled might have been
     // preempted by the manual compactions. Need to schedule it back.
     MaybeScheduleFlushOrCompaction();
@@ -845,7 +845,7 @@ Status DBImpl::CompactFiles(const CompactionOptions& compact_options,
   // Perform CompactFiles
   TEST_SYNC_POINT("TestCompactFiles::IngestExternalFile2");
   {
-    InstrumentedMutexLock l(&mutex_);
+    InstrumentedMutexLock l(&mutex_, __func__, __LINE__, immutable_db_options_.info_log.get());
 
     // This call will unlock/lock the mutex to wait for current running
     // IngestExternalFile() calls to finish.
@@ -865,7 +865,7 @@ Status DBImpl::CompactFiles(const CompactionOptions& compact_options,
 
   // Find and delete obsolete files
   {
-    InstrumentedMutexLock l(&mutex_);
+    InstrumentedMutexLock l(&mutex_, __func__, __LINE__, immutable_db_options_.info_log.get());
     // If !s.ok(), this means that Compaction failed. In that case, we want
     // to delete all obsolete files we might have created and we force
     // FindObsoleteFiles(). This is because job_context does not
@@ -1011,13 +1011,13 @@ Status DBImpl::CompactFilesImpl(
 
   compaction_job.Prepare();
 
-  mutex_.Unlock();
+  mutex_.Unlock(immutable_db_options_.info_log.get());
   TEST_SYNC_POINT("CompactFilesImpl:0");
   TEST_SYNC_POINT("CompactFilesImpl:1");
   compaction_job.Run();
   TEST_SYNC_POINT("CompactFilesImpl:2");
   TEST_SYNC_POINT("CompactFilesImpl:3");
-  mutex_.Lock();
+  mutex_.Lock(__func__, __LINE__);
 
   Status status = compaction_job.Install(*c->mutable_cf_options());
   if (status.ok()) {
@@ -1077,7 +1077,7 @@ Status DBImpl::CompactFilesImpl(
 #endif  // ROCKSDB_LITE
 
 Status DBImpl::PauseBackgroundWork() {
-  InstrumentedMutexLock guard_lock(&mutex_);
+  InstrumentedMutexLock guard_lock(&mutex_, __func__, __LINE__, immutable_db_options_.info_log.get());
   bg_compaction_paused_++;
   while (bg_bottom_compaction_scheduled_ > 0 || bg_compaction_scheduled_ > 0 ||
          bg_flush_scheduled_ > 0) {
@@ -1088,7 +1088,7 @@ Status DBImpl::PauseBackgroundWork() {
 }
 
 Status DBImpl::ContinueBackgroundWork() {
-  InstrumentedMutexLock guard_lock(&mutex_);
+  InstrumentedMutexLock guard_lock(&mutex_, __func__, __LINE__, immutable_db_options_.info_log.get());
   if (bg_work_paused_ == 0) {
     return Status::InvalidArgument();
   }
@@ -1119,7 +1119,7 @@ void DBImpl::NotifyOnCompactionBegin(ColumnFamilyData* cfd, Compaction* c,
   Version* current = cfd->current();
   current->Ref();
   // release lock while notifying events
-  mutex_.Unlock();
+  mutex_.Unlock(immutable_db_options_.info_log.get());
   TEST_SYNC_POINT("DBImpl::NotifyOnCompactionBegin::UnlockMutex");
   {
     CompactionJobInfo info;
@@ -1156,7 +1156,7 @@ void DBImpl::NotifyOnCompactionBegin(ColumnFamilyData* cfd, Compaction* c,
       listener->OnCompactionBegin(this, info);
     }
   }
-  mutex_.Lock();
+  mutex_.Lock(__func__, __LINE__);
   current->Unref();
 #else
   (void)cfd;
@@ -1181,7 +1181,7 @@ void DBImpl::NotifyOnCompactionCompleted(
   Version* current = cfd->current();
   current->Ref();
   // release lock while notifying events
-  mutex_.Unlock();
+  mutex_.Unlock(immutable_db_options_.info_log.get());
   TEST_SYNC_POINT("DBImpl::NotifyOnCompactionCompleted::UnlockMutex");
   {
     CompactionJobInfo info;
@@ -1191,7 +1191,7 @@ void DBImpl::NotifyOnCompactionCompleted(
       listener->OnCompactionCompleted(this, info);
     }
   }
-  mutex_.Lock();
+  mutex_.Lock(__func__, __LINE__);
   current->Unref();
   // no need to signal bg_cv_ as it will be signaled at the end of the
   // flush process.
@@ -1216,7 +1216,7 @@ Status DBImpl::ReFitLevel(ColumnFamilyData* cfd, int level, int target_level) {
 
   Status status;
 
-  InstrumentedMutexLock guard_lock(&mutex_);
+  InstrumentedMutexLock guard_lock(&mutex_, __func__, __LINE__, immutable_db_options_.info_log.get());
 
   // only allow one thread refitting
   if (refitting_level_) {
@@ -1296,7 +1296,7 @@ int DBImpl::MaxMemCompactionLevel(ColumnFamilyHandle* /*column_family*/) {
 
 int DBImpl::Level0StopWriteTrigger(ColumnFamilyHandle* column_family) {
   auto cfh = reinterpret_cast<ColumnFamilyHandleImpl*>(column_family);
-  InstrumentedMutexLock l(&mutex_);
+  InstrumentedMutexLock l(&mutex_, __func__, __LINE__, immutable_db_options_.info_log.get());
   return cfh->cfd()
       ->GetSuperVersion()
       ->mutable_cf_options.level0_stop_writes_trigger;
@@ -1408,7 +1408,7 @@ Status DBImpl::RunManualCompaction(
 
   TEST_SYNC_POINT("DBImpl::RunManualCompaction:0");
   TEST_SYNC_POINT("DBImpl::RunManualCompaction:1");
-  InstrumentedMutexLock l(&mutex_);
+  InstrumentedMutexLock l(&mutex_, __func__, __LINE__, immutable_db_options_.info_log.get());
 
   // When a manual compaction arrives, temporarily disable scheduling of
   // non-manual compactions and wait until the number of scheduled compaction
@@ -1532,7 +1532,7 @@ Status DBImpl::FlushMemTable(ColumnFamilyData* cfd,
   FlushRequest flush_req;
   {
     WriteContext context;
-    InstrumentedMutexLock guard_lock(&mutex_);
+    InstrumentedMutexLock guard_lock(&mutex_, __func__, __LINE__, immutable_db_options_.info_log.get());
 
     WriteThread::Writer w;
     WriteThread::Writer nonmem_w;
@@ -1622,7 +1622,7 @@ Status DBImpl::FlushMemTable(ColumnFamilyData* cfd,
     for (auto* tmp_cfd : cfds) {
       if (tmp_cfd->Unref()) {
         // Only one thread can reach here.
-        InstrumentedMutexLock lock_guard(&mutex_);
+        InstrumentedMutexLock lock_guard(&mutex_, __func__, __LINE__, immutable_db_options_.info_log.get());
         delete tmp_cfd;
       }
     }
@@ -1657,7 +1657,7 @@ Status DBImpl::AtomicFlushMemTables(
   autovector<ColumnFamilyData*> cfds;
   {
     WriteContext context;
-    InstrumentedMutexLock guard_lock(&mutex_);
+    InstrumentedMutexLock guard_lock(&mutex_, __func__, __LINE__, immutable_db_options_.info_log.get());
 
     WriteThread::Writer w;
     WriteThread::Writer nonmem_w;
@@ -1727,7 +1727,7 @@ Status DBImpl::AtomicFlushMemTables(
     for (auto* cfd : cfds) {
       if (cfd->Unref()) {
         // Only one thread can reach here.
-        InstrumentedMutexLock lock_guard(&mutex_);
+        InstrumentedMutexLock lock_guard(&mutex_, __func__, __LINE__, immutable_db_options_.info_log.get());
         delete cfd;
       }
     }
@@ -1745,7 +1745,7 @@ Status DBImpl::WaitUntilFlushWouldNotStallWrites(ColumnFamilyData* cfd,
                                                  bool* flush_needed) {
   {
     *flush_needed = true;
-    InstrumentedMutexLock l(&mutex_);
+    InstrumentedMutexLock l(&mutex_, __func__, __LINE__, immutable_db_options_.info_log.get());
     uint64_t orig_active_memtable_id = cfd->mem()->GetID();
     WriteStallCondition write_stall_condition = WriteStallCondition::kNormal;
     do {
@@ -1825,7 +1825,7 @@ Status DBImpl::WaitForFlushMemTables(
     bool resuming_from_bg_err) {
   int num = static_cast<int>(cfds.size());
   // Wait until the compaction completes
-  InstrumentedMutexLock l(&mutex_);
+  InstrumentedMutexLock l(&mutex_, __func__, __LINE__, immutable_db_options_.info_log.get());
   // If the caller is trying to resume from bg error, then
   // error_handler_.IsDBStopped() is true.
   while (resuming_from_bg_err || !error_handler_.IsDBStopped()) {
@@ -2221,7 +2221,7 @@ void DBImpl::BackgroundCallFlush(Env::Priority thread_pri) {
   LogBuffer log_buffer(InfoLogLevel::INFO_LEVEL,
                        immutable_db_options_.info_log.get());
   {
-    InstrumentedMutexLock l(&mutex_);
+    InstrumentedMutexLock l(&mutex_, __func__, __LINE__, immutable_db_options_.info_log.get());
     assert(bg_flush_scheduled_);
     num_running_flushes_++;
 
@@ -2240,7 +2240,7 @@ void DBImpl::BackgroundCallFlush(Env::Priority thread_pri) {
       uint64_t error_cnt =
           default_cf_internal_stats_->BumpAndGetBackgroundErrorCount();
       bg_cv_.SignalAll();  // In case a waiter can proceed despite the error
-      mutex_.Unlock();
+      mutex_.Unlock(immutable_db_options_.info_log.get());
       ROCKS_LOG_ERROR(immutable_db_options_.info_log,
                       "Waiting after background flush error: %s"
                       "Accumulated background error counts: %" PRIu64,
@@ -2248,7 +2248,7 @@ void DBImpl::BackgroundCallFlush(Env::Priority thread_pri) {
       log_buffer.FlushBufferToLog();
       LogFlush(immutable_db_options_.info_log);
       env_->SleepForMicroseconds(1000000);
-      mutex_.Lock();
+      mutex_.Lock(__func__, __LINE__);
     }
 
     TEST_SYNC_POINT("DBImpl::BackgroundCallFlush:FlushFinish:0");
@@ -2261,7 +2261,7 @@ void DBImpl::BackgroundCallFlush(Env::Priority thread_pri) {
     // delete unnecessary files if any, this is done outside the mutex
     if (job_context.HaveSomethingToClean() ||
         job_context.HaveSomethingToDelete() || !log_buffer.IsEmpty()) {
-      mutex_.Unlock();
+      mutex_.Unlock(immutable_db_options_.info_log.get());
       TEST_SYNC_POINT("DBImpl::BackgroundCallFlush:FilesFound");
       // Have to flush the info logs before bg_flush_scheduled_--
       // because if bg_flush_scheduled_ becomes 0 and the lock is
@@ -2273,7 +2273,7 @@ void DBImpl::BackgroundCallFlush(Env::Priority thread_pri) {
         PurgeObsoleteFiles(job_context);
       }
       job_context.Clean();
-      mutex_.Lock();
+      mutex_.Lock(__func__, __LINE__);
     }
     TEST_SYNC_POINT("DBImpl::BackgroundCallFlush:ContextCleanedUp");
 
@@ -2299,7 +2299,7 @@ void DBImpl::BackgroundCallCompaction(PrepickedCompaction* prepicked_compaction,
   LogBuffer log_buffer(InfoLogLevel::INFO_LEVEL,
                        immutable_db_options_.info_log.get());
   {
-    InstrumentedMutexLock l(&mutex_);
+    InstrumentedMutexLock l(&mutex_, __func__, __LINE__, immutable_db_options_.info_log.get());
 
     // This call will unlock/lock the mutex to wait for current running
     // IngestExternalFile() calls to finish.
@@ -2318,9 +2318,9 @@ void DBImpl::BackgroundCallCompaction(PrepickedCompaction* prepicked_compaction,
     TEST_SYNC_POINT("BackgroundCallCompaction:1");
     if (s.IsBusy()) {
       bg_cv_.SignalAll();  // In case a waiter can proceed despite the error
-      mutex_.Unlock();
+      mutex_.Unlock(immutable_db_options_.info_log.get());
       env_->SleepForMicroseconds(10000);  // prevent hot loop
-      mutex_.Lock();
+      mutex_.Lock(__func__, __LINE__);
     } else if (!s.ok() && !s.IsShutdownInProgress() &&
                !s.IsColumnFamilyDropped()) {
       // Wait a little bit before retrying background compaction in
@@ -2330,7 +2330,7 @@ void DBImpl::BackgroundCallCompaction(PrepickedCompaction* prepicked_compaction,
       uint64_t error_cnt =
           default_cf_internal_stats_->BumpAndGetBackgroundErrorCount();
       bg_cv_.SignalAll();  // In case a waiter can proceed despite the error
-      mutex_.Unlock();
+      mutex_.Unlock(immutable_db_options_.info_log.get());
       log_buffer.FlushBufferToLog();
       ROCKS_LOG_ERROR(immutable_db_options_.info_log,
                       "Waiting after background compaction error: %s, "
@@ -2338,7 +2338,7 @@ void DBImpl::BackgroundCallCompaction(PrepickedCompaction* prepicked_compaction,
                       s.ToString().c_str(), error_cnt);
       LogFlush(immutable_db_options_.info_log);
       env_->SleepForMicroseconds(1000000);
-      mutex_.Lock();
+      mutex_.Lock(__func__, __LINE__);
     }
 
     ReleaseFileNumberFromPendingOutputs(pending_outputs_inserted_elem);
@@ -2353,7 +2353,7 @@ void DBImpl::BackgroundCallCompaction(PrepickedCompaction* prepicked_compaction,
     // delete unnecessary files if any, this is done outside the mutex
     if (job_context.HaveSomethingToClean() ||
         job_context.HaveSomethingToDelete() || !log_buffer.IsEmpty()) {
-      mutex_.Unlock();
+      mutex_.Unlock(immutable_db_options_.info_log.get());
       // Have to flush the info logs before bg_compaction_scheduled_--
       // because if bg_flush_scheduled_ becomes 0 and the lock is
       // released, the deconstructor of DB can kick in and destroy all the
@@ -2365,7 +2365,7 @@ void DBImpl::BackgroundCallCompaction(PrepickedCompaction* prepicked_compaction,
         TEST_SYNC_POINT("DBImpl::BackgroundCallCompaction:PurgedObsoleteFiles");
       }
       job_context.Clean();
-      mutex_.Lock();
+      mutex_.Lock(__func__, __LINE__);
     }
 
     assert(num_running_compactions_ > 0);
@@ -2753,12 +2753,12 @@ Status DBImpl::BackgroundCompaction(bool* made_progress,
     NotifyOnCompactionBegin(c->column_family_data(), c.get(), status,
                             compaction_job_stats, job_context->job_id);
 
-    mutex_.Unlock();
+    mutex_.Unlock(immutable_db_options_.info_log.get());
     TEST_SYNC_POINT_CALLBACK(
         "DBImpl::BackgroundCompaction:NonTrivial:BeforeRun", nullptr);
     compaction_job.Run();
     TEST_SYNC_POINT("DBImpl::BackgroundCompaction:NonTrivial:AfterRun");
-    mutex_.Lock();
+    mutex_.Lock(__func__, __LINE__);
 
     status = compaction_job.Install(*c->mutable_cf_options());
     if (status.ok()) {
@@ -3059,7 +3059,7 @@ void DBImpl::MarkAsGrabbedForPurge(uint64_t file_number) {
 }
 
 void DBImpl::SetSnapshotChecker(SnapshotChecker* snapshot_checker) {
-  InstrumentedMutexLock l(&mutex_);
+  InstrumentedMutexLock l(&mutex_, __func__, __LINE__, immutable_db_options_.info_log.get());
   // snapshot_checker_ should only set once. If we need to set it multiple
   // times, we need to make sure the old one is not deleted while it is still
   // using by a compaction job.

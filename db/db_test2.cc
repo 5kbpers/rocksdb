@@ -1452,7 +1452,7 @@ TEST_F(DBTest2, DuplicateSnapshot) {
   snapshots.push_back(db_->GetSnapshot());
 
   {
-    InstrumentedMutexLock l(dbi->mutex());
+    InstrumentedMutexLock l(dbi->mutex(), __func__, __LINE__, nullptr);
     auto seqs = dbi->snapshots().GetAll(&oldest_ww_snap);
     ASSERT_EQ(seqs.size(), 4);  // duplicates are not counted
     ASSERT_EQ(oldest_ww_snap, first_ww_snap);

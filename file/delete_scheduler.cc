@@ -42,7 +42,7 @@ DeleteScheduler::DeleteScheduler(Env* env, int64_t rate_bytes_per_sec,
 
 DeleteScheduler::~DeleteScheduler() {
   {
-    InstrumentedMutexLock l(&mu_);
+    InstrumentedMutexLock l(&mu_, __func__, __LINE__, nullptr);
     closing_ = true;
     cv_.SignalAll();
   }
@@ -88,7 +88,7 @@ Status DeleteScheduler::DeleteFile(const std::string& file_path,
 
   // Add file to delete queue
   {
-    InstrumentedMutexLock l(&mu_);
+    InstrumentedMutexLock l(&mu_, __func__, __LINE__, nullptr);
     queue_.emplace(trash_file, dir_to_sync);
     pending_files_++;
     if (pending_files_ == 1) {
@@ -99,7 +99,7 @@ Status DeleteScheduler::DeleteFile(const std::string& file_path,
 }
 
 std::map<std::string, Status> DeleteScheduler::GetBackgroundErrors() {
-  InstrumentedMutexLock l(&mu_);
+  InstrumentedMutexLock l(&mu_, __func__, __LINE__, nullptr);
   return bg_errors_;
 }
 
@@ -163,7 +163,7 @@ Status DeleteScheduler::MarkAsTrash(const std::string& file_path,
   // TODO(tec) : Implement Env::RenameFileIfNotExist and remove
   //             file_move_mu mutex.
   int cnt = 0;
-  InstrumentedMutexLock l(&file_move_mu_);
+  InstrumentedMutexLock l(&file_move_mu_, __func__, __LINE__, nullptr);
   while (true) {
     s = env_->FileExists(*trash_file);
     if (s.IsNotFound()) {
@@ -189,7 +189,7 @@ void DeleteScheduler::BackgroundEmptyTrash() {
   TEST_SYNC_POINT("DeleteScheduler::BackgroundEmptyTrash");
 
   while (true) {
-    InstrumentedMutexLock l(&mu_);
+    InstrumentedMutexLock l(&mu_, __func__, __LINE__, nullptr);
     while (queue_.empty() && !closing_) {
       cv_.Wait();
     }
@@ -215,14 +215,14 @@ void DeleteScheduler::BackgroundEmptyTrash() {
       std::string path_in_trash = fad.fname;
 
       // We dont need to hold the lock while deleting the file
-      mu_.Unlock();
+      mu_.Unlock(nullptr);
       uint64_t deleted_bytes = 0;
       bool is_complete = true;
       // Delete file from trash and update total_penlty value
       Status s =
           DeleteTrashFile(path_in_trash, fad.dir, &deleted_bytes, &is_complete);
       total_deleted_bytes += deleted_bytes;
-      mu_.Lock();
+      mu_.Lock("", 0);
       if (is_complete) {
         queue_.pop();
       }
@@ -342,7 +342,7 @@ Status DeleteScheduler::DeleteTrashFile(const std::string& path_in_trash,
 }
 
 void DeleteScheduler::WaitForEmptyTrash() {
-  InstrumentedMutexLock l(&mu_);
+  InstrumentedMutexLock l(&mu_, __func__, __LINE__, nullptr);
   while (pending_files_ > 0 && !closing_) {
     cv_.Wait();
   }

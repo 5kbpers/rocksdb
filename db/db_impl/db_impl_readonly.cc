@@ -37,7 +37,7 @@ Status DBImplReadOnly::Get(const ReadOptions& read_options,
   auto cfh = reinterpret_cast<ColumnFamilyHandleImpl*>(column_family);
   auto cfd = cfh->cfd();
   if (tracer_) {
-    InstrumentedMutexLock lock(&trace_mutex_);
+    InstrumentedMutexLock lock(&trace_mutex_, __func__, __LINE__, nullptr);
     if (tracer_) {
       tracer_->Get(column_family, key);
     }
@@ -161,7 +161,7 @@ Status DB::OpenForReadOnly(
 
   SuperVersionContext sv_context(/* create_superversion */ true);
   DBImplReadOnly* impl = new DBImplReadOnly(db_options, dbname);
-  impl->mutex_.Lock();
+  impl->mutex_.Lock(__func__, __LINE__);
   Status s = impl->Recover(column_families, true /* read only */,
                            error_if_log_file_exist);
   if (s.ok()) {
@@ -182,7 +182,7 @@ Status DB::OpenForReadOnly(
       cfd->InstallSuperVersion(&sv_context, &impl->mutex_);
     }
   }
-  impl->mutex_.Unlock();
+  impl->mutex_.Unlock(impl->immutable_db_options_.info_log.get());
   sv_context.Clean();
   if (s.ok()) {
     *dbptr = impl;

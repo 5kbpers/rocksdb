@@ -141,7 +141,7 @@ class CompactionJobTest : public testing::Test {
     edit.AddFile(level, file_number, 0, 10, smallest_key, largest_key,
         smallest_seqno, largest_seqno, false);
 
-    mutex_.Lock();
+    mutex_.Lock(__func__, __LINE__);
     versions_->LogAndApply(versions_->GetColumnFamilySet()->GetDefault(),
                            mutable_cf_options_, &edit, &mutex_);
     mutex_.Unlock();
@@ -267,7 +267,7 @@ class CompactionJobTest : public testing::Test {
     compaction.SetInputVersion(cfd->current());
 
     LogBuffer log_buffer(InfoLogLevel::INFO_LEVEL, db_options_.info_log.get());
-    mutex_.Lock();
+    mutex_.Lock(__func__, __LINE__);
     EventLogger event_logger(db_options_.info_log.get());
     // TODO(yiwu) add a mock snapshot checker and add test for it.
     SnapshotChecker* snapshot_checker = nullptr;
@@ -285,7 +285,7 @@ class CompactionJobTest : public testing::Test {
     Status s;
     s = compaction_job.Run();
     ASSERT_OK(s);
-    mutex_.Lock();
+    mutex_.Lock(__func__, __LINE__);
     ASSERT_OK(compaction_job.Install(*cfd->GetLatestMutableCFOptions()));
     mutex_.Unlock();
 

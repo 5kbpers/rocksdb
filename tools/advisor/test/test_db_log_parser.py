@@ -59,7 +59,7 @@ class TestLog(unittest.TestCase):
 
 class TestDatabaseLogs(unittest.TestCase):
     def test_check_and_trigger_conditions(self):
-        this_path = os.path.abspath(os.path.dirname(__file__))
+        this_path = os.path.abspath(os.path.dirname(__func__))
         logs_path_prefix = os.path.join(this_path, 'input_files/LOG-0')
         column_families = ['default', 'col-fam-A', 'col-fam-B']
         db_logs = DatabaseLogs(logs_path_prefix, column_families)

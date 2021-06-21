@@ -116,7 +116,7 @@ class MemTableListTest : public testing::Test {
     uint64_t file_num = file_number.fetch_add(1);
     // Create dummy mutex.
     InstrumentedMutex mutex;
-    InstrumentedMutexLock l(&mutex);
+    InstrumentedMutexLock l(&mutex, __func__, __LINE__, nullptr);
     std::list<std::unique_ptr<FlushJobInfo>> flush_jobs_info;
     Status s = list->TryInstallMemtableFlushResults(
         cfd, mutable_cf_options, m, &dummy_prep_tracker, &versions, &mutex,
@@ -176,7 +176,7 @@ class MemTableListTest : public testing::Test {
       file_meta_ptrs.push_back(&meta);
     }
     InstrumentedMutex mutex;
-    InstrumentedMutexLock l(&mutex);
+    InstrumentedMutexLock l(&mutex, __func__, __LINE__, nullptr);
     return InstallMemtableAtomicFlushResults(
         &lists, cfds, mutable_cf_options_list, mems_list, &versions, &mutex,
         file_meta_ptrs, to_delete, nullptr, &log_buffer);

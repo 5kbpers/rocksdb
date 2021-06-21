@@ -201,11 +201,11 @@ void DBImpl::FindObsoleteFiles(JobContext* job_context, bool force,
       job_context->size_log_to_delete += earliest.size;
       total_log_size_ -= earliest.size;
       if (two_write_queues_) {
-        log_write_mutex_.Lock();
+        log_write_mutex_.Lock(__func__, __LINE__);
       }
       alive_log_files_.pop_front();
       if (two_write_queues_) {
-        log_write_mutex_.Unlock();
+        log_write_mutex_.Unlock(nullptr);
       }
       // Current log should always stay alive since it can't have
       // number < MinLogNumber().
@@ -220,7 +220,7 @@ void DBImpl::FindObsoleteFiles(JobContext* job_context, bool force,
       }
       logs_to_free_.push_back(log.ReleaseWriter());
       {
-        InstrumentedMutexLock wl(&log_write_mutex_);
+        InstrumentedMutexLock wl(&log_write_mutex_, __func__, __LINE__, nullptr);
         logs_.pop_front();
       }
     }
@@ -487,7 +487,7 @@ void DBImpl::PurgeObsoleteFiles(JobContext& state, bool schedule_only) {
 
     Status file_deletion_status;
     if (schedule_only) {
-      InstrumentedMutexLock guard_lock(&mutex_);
+      InstrumentedMutexLock guard_lock(&mutex_, __func__, __LINE__, immutable_db_options_.info_log.get());
       SchedulePendingPurge(fname, dir_to_sync, type, number, state.job_id);
     } else {
       DeleteObsoleteFileImpl(state.job_id, fname, dir_to_sync, type, number);
@@ -497,7 +497,7 @@ void DBImpl::PurgeObsoleteFiles(JobContext& state, bool schedule_only) {
   {
     // After purging obsolete files, remove them from files_grabbed_for_purge_.
     // Use a temporary vector to perform bulk deletion via swap.
-    InstrumentedMutexLock guard_lock(&mutex_);
+    InstrumentedMutexLock guard_lock(&mutex_, __func__, __LINE__, immutable_db_options_.info_log.get());
     autovector<uint64_t> to_be_removed;
     for (auto fn : files_grabbed_for_purge_) {
       if (files_to_del.count(fn) != 0) {
@@ -547,7 +547,7 @@ void DBImpl::PurgeObsoleteFiles(JobContext& state, bool schedule_only) {
   wal_manager_.PurgeObsoleteWALFiles();
 #endif  // ROCKSDB_LITE
   LogFlush(immutable_db_options_.info_log);
-  InstrumentedMutexLock l(&mutex_);
+  InstrumentedMutexLock l(&mutex_, __func__, __LINE__, immutable_db_options_.info_log.get());
   --pending_purge_obsolete_files_;
   assert(pending_purge_obsolete_files_ >= 0);
   if (pending_purge_obsolete_files_ == 0) {
@@ -561,12 +561,12 @@ void DBImpl::DeleteObsoleteFiles() {
   JobContext job_context(next_job_id_.fetch_add(1));
   FindObsoleteFiles(&job_context, true);
 
-  mutex_.Unlock();
+  mutex_.Unlock(immutable_db_options_.info_log.get());
   if (job_context.HaveSomethingToDelete()) {
     PurgeObsoleteFiles(job_context);
   }
   job_context.Clean();
-  mutex_.Lock();
+  mutex_.Lock(__func__, __LINE__);
 }
 
 uint64_t FindMinPrepLogReferencedByMemTable(

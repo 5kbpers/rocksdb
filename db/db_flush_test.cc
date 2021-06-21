@@ -354,12 +354,12 @@ TEST_F(DBFlushTest, FireOnFlushCompletedAfterCommittedResult) {
     void CheckFlushResultCommitted(DB* db, SequenceNumber seq) {
       DBImpl* db_impl = static_cast_with_check<DBImpl>(db);
       InstrumentedMutex* mutex = db_impl->mutex();
-      mutex->Lock();
+      mutex->Lock(__func__, __LINE__);
       auto* cfd =
           reinterpret_cast<ColumnFamilyHandleImpl*>(db->DefaultColumnFamily())
               ->cfd();
       ASSERT_LT(seq, cfd->imm()->current()->GetEarliestSequenceNumber());
-      mutex->Unlock();
+      mutex->Unlock(nullptr);
     }
 
     std::atomic<SequenceNumber> seq1{0};

@@ -24,7 +24,7 @@
 namespace rocksdb {
 
 Status DBImpl::DisableFileDeletions() {
-  InstrumentedMutexLock l(&mutex_);
+  InstrumentedMutexLock l(&mutex_, __func__, __LINE__, immutable_db_options_.info_log.get());
   ++disable_delete_obsolete_files_;
   if (disable_delete_obsolete_files_ == 1) {
     ROCKS_LOG_INFO(immutable_db_options_.info_log, "File Deletions Disabled");
@@ -42,7 +42,7 @@ Status DBImpl::EnableFileDeletions(bool force) {
   JobContext job_context(0);
   bool file_deletion_enabled = false;
   {
-    InstrumentedMutexLock l(&mutex_);
+    InstrumentedMutexLock l(&mutex_, __func__, __LINE__, immutable_db_options_.info_log.get());
     if (force) {
       // if force, we need to enable file deletions right away
       disable_delete_obsolete_files_ = 0;
@@ -79,7 +79,7 @@ Status DBImpl::GetLiveFiles(std::vector<std::string>& ret,
                             bool flush_memtable) {
   *manifest_file_size = 0;
 
-  mutex_.Lock();
+  mutex_.Lock(__func__, __LINE__);
 
   if (flush_memtable) {
     // flush all dirty data to disk.
@@ -87,21 +87,21 @@ Status DBImpl::GetLiveFiles(std::vector<std::string>& ret,
     if (immutable_db_options_.atomic_flush) {
       autovector<ColumnFamilyData*> cfds;
       SelectColumnFamiliesForAtomicFlush(&cfds);
-      mutex_.Unlock();
+      mutex_.Unlock(immutable_db_options_.info_log.get());
       status = AtomicFlushMemTables(cfds, FlushOptions(),
                                     FlushReason::kGetLiveFiles);
-      mutex_.Lock();
+      mutex_.Lock(__func__, __LINE__);
     } else {
       for (auto cfd : *versions_->GetColumnFamilySet()) {
         if (cfd->IsDropped()) {
           continue;
         }
         cfd->Ref();
-        mutex_.Unlock();
+        mutex_.Unlock(immutable_db_options_.info_log.get());
         status = FlushMemTable(cfd, FlushOptions(), FlushReason::kGetLiveFiles);
         TEST_SYNC_POINT("DBImpl::GetLiveFiles:1");
         TEST_SYNC_POINT("DBImpl::GetLiveFiles:2");
-        mutex_.Lock();
+        mutex_.Lock(__func__, __LINE__);
         cfd->Unref();
         if (!status.ok()) {
           break;
@@ -111,7 +111,7 @@ Status DBImpl::GetLiveFiles(std::vector<std::string>& ret,
     versions_->GetColumnFamilySet()->FreeDeadColumnFamilies();
 
     if (!status.ok()) {
-      mutex_.Unlock();
+      mutex_.Unlock(immutable_db_options_.info_log.get());
       ROCKS_LOG_ERROR(immutable_db_options_.info_log, "Cannot Flush data %s\n",
                       status.ToString().c_str());
       return status;
@@ -143,7 +143,7 @@ Status DBImpl::GetLiveFiles(std::vector<std::string>& ret,
   // find length of manifest file while holding the mutex lock
   *manifest_file_size = versions_->manifest_file_size();
 
-  mutex_.Unlock();
+  mutex_.Unlock(immutable_db_options_.info_log.get());
   return Status::OK();
 }
 
@@ -154,7 +154,7 @@ Status DBImpl::GetSortedWalFiles(VectorLogPtr& files) {
     // wait for pending purges to finish since WalManager doesn't know which
     // files are going to be purged. Additional purges won't be scheduled as
     // long as deletions are disabled (so the below loop must terminate).
-    InstrumentedMutexLock l(&mutex_);
+    InstrumentedMutexLock l(&mutex_, __func__, __LINE__, immutable_db_options_.info_log.get());
     while (disable_delete_obsolete_files_ > 0 &&
            pending_purge_obsolete_files_ > 0) {
       bg_cv_.Wait();

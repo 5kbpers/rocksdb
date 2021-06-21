@@ -65,7 +65,7 @@ class ErrorHandlerListener : public EventListener {
 
   void OnTableFileCreationStarted(
       const TableFileCreationBriefInfo& /*ti*/) override {
-    InstrumentedMutexLock l(&mutex_);
+    InstrumentedMutexLock l(&mutex_, __func__, __LINE__, nullptr);
     file_creation_started_ = true;
     if (file_count_ > 0) {
       if (--file_count_ == 0) {
@@ -85,13 +85,13 @@ class ErrorHandlerListener : public EventListener {
   }
 
   void OnErrorRecoveryCompleted(Status /*old_bg_error*/) override {
-    InstrumentedMutexLock l(&mutex_);
+    InstrumentedMutexLock l(&mutex_, __func__, __LINE__, nullptr);
     recovery_complete_ = true;
     cv_.SignalAll();
   }
 
   bool WaitForRecovery(uint64_t /*abs_time_us*/) {
-    InstrumentedMutexLock l(&mutex_);
+    InstrumentedMutexLock l(&mutex_, __func__, __LINE__, nullptr);
     while (!recovery_complete_) {
       cv_.Wait(/*abs_time_us*/);
     }
@@ -103,7 +103,7 @@ class ErrorHandlerListener : public EventListener {
   }
 
   void WaitForTableFileCreationStarted(uint64_t /*abs_time_us*/) {
-    InstrumentedMutexLock l(&mutex_);
+    InstrumentedMutexLock l(&mutex_, __func__, __LINE__, nullptr);
     while (!file_creation_started_) {
       cv_.Wait(/*abs_time_us*/);
     }

@@ -14,7 +14,7 @@ namespace rocksdb {
 #include <sys/syscall.h>
 #include <unistd.h>
 #define LOG_DEBUG(...)  do{\
-    printf("[%ld:%s:%i:%s]", syscall(SYS_gettid), __FILE__, __LINE__, __FUNCTION__);\
+    printf("[%ld:%s:%i:%s]", syscall(SYS_gettid), __func__, __LINE__, __FUNCTION__);\
     printf(__VA_ARGS__);\
   }while(0)
 #else

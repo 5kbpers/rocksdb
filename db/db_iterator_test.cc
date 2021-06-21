@@ -48,7 +48,7 @@ class DBIteratorTest : public DBTestBase,
     if (use_read_callback) {
       read_callback = new DummyReadCallback();
       read_callback->SetSnapshot(seq);
-      InstrumentedMutexLock lock(&mutex_);
+      InstrumentedMutexLock lock(&mutex_, __func__, __LINE__, nullptr);
       read_callbacks_.push_back(
           std::unique_ptr<DummyReadCallback>(read_callback));
     }

@@ -363,7 +363,7 @@ void PessimisticTransactionDB::AddColumnFamily(
 Status PessimisticTransactionDB::CreateColumnFamily(
     const ColumnFamilyOptions& options, const std::string& column_family_name,
     ColumnFamilyHandle** handle) {
-  InstrumentedMutexLock l(&column_family_mutex_);
+  InstrumentedMutexLock l(&column_family_mutex_, "", 0, nullptr);
   Status s = VerifyCFOptions(options);
   if (!s.ok()) {
     return s;
@@ -382,7 +382,7 @@ Status PessimisticTransactionDB::CreateColumnFamily(
 // column family.
 Status PessimisticTransactionDB::DropColumnFamily(
     ColumnFamilyHandle* column_family) {
-  InstrumentedMutexLock l(&column_family_mutex_);
+  InstrumentedMutexLock l(&column_family_mutex_, "", 0, nullptr);
 
   Status s = db_->DropColumnFamily(column_family);
   if (s.ok()) {

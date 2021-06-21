@@ -278,7 +278,7 @@ BlockCacheTracer::~BlockCacheTracer() { EndTrace(); }
 Status BlockCacheTracer::StartTrace(
     Env* env, const TraceOptions& trace_options,
     std::unique_ptr<TraceWriter>&& trace_writer) {
-  InstrumentedMutexLock lock_guard(&trace_writer_mutex_);
+  InstrumentedMutexLock lock_guard(&trace_writer_mutex_, __func__, __LINE__, nullptr);
   if (writer_.load()) {
     return Status::Busy();
   }
@@ -290,7 +290,7 @@ Status BlockCacheTracer::StartTrace(
 }
 
 void BlockCacheTracer::EndTrace() {
-  InstrumentedMutexLock lock_guard(&trace_writer_mutex_);
+  InstrumentedMutexLock lock_guard(&trace_writer_mutex_, __func__, __LINE__, nullptr);
   if (!writer_.load()) {
     return;
   }
@@ -305,7 +305,7 @@ Status BlockCacheTracer::WriteBlockAccess(const BlockCacheTraceRecord& record,
   if (!writer_.load() || !ShouldTrace(block_key, trace_options_)) {
     return Status::OK();
   }
-  InstrumentedMutexLock lock_guard(&trace_writer_mutex_);
+  InstrumentedMutexLock lock_guard(&trace_writer_mutex_, __func__, __LINE__, nullptr);
   if (!writer_.load()) {
     return Status::OK();
   }

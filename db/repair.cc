@@ -153,11 +153,11 @@ class Repairer {
     cfd = nullptr;
     edit.AddColumnFamily(cf_name);
 
-    mutex_.Lock();
+    mutex_.Lock(__func__, __LINE__);
     Status status = vset_.LogAndApply(cfd, mut_cf_opts, &edit, &mutex_,
                                       nullptr /* db_directory */,
                                       false /* new_descriptor_log */, cf_opts);
-    mutex_.Unlock();
+    mutex_.Unlock(db_options_.info_log.get());
     return status;
   }
 
@@ -595,11 +595,11 @@ class Repairer {
       }
       assert(next_file_number_ > 0);
       vset_.MarkFileNumberUsed(next_file_number_ - 1);
-      mutex_.Lock();
+      mutex_.Lock(__func__, __LINE__);
       Status status = vset_.LogAndApply(
           cfd, *cfd->GetLatestMutableCFOptions(), &edit, &mutex_,
           nullptr /* db_directory */, false /* new_descriptor_log */);
-      mutex_.Unlock();
+      mutex_.Unlock(db_options_.info_log.get());
       if (!status.ok()) {
         return status;
       }

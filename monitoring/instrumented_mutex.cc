@@ -20,11 +20,14 @@ Statistics* stats_for_report(Env* env, Statistics* stats) {
 }
 }  // namespace
 
-void InstrumentedMutex::Lock() {
+void InstrumentedMutex::Lock(std::string func, int line) {
   PERF_CONDITIONAL_TIMER_FOR_MUTEX_GUARD(
       db_mutex_lock_nanos, stats_code_ == DB_MUTEX_WAIT_MICROS,
       stats_for_report(env_, stats_), stats_code_);
   LockInternal();
+  func_ = func;
+  line_ = line; 
+  lock_time_nanos_ = env_->NowNanos();
 }
 
 void InstrumentedMutex::LockInternal() {

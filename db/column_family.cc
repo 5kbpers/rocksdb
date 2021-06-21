@@ -58,7 +58,7 @@ ColumnFamilyHandleImpl::~ColumnFamilyHandleImpl() {
     // before final cleaning up finishes.
     ColumnFamilyOptions initial_cf_options_copy = cfd_->initial_cf_options();
     JobContext job_context(0);
-    mutex_->Lock();
+    mutex_->Lock(__func__, __LINE__);
     if (cfd_->Unref()) {
       bool dropped = cfd_->IsDropped();
 
@@ -68,15 +68,15 @@ ColumnFamilyHandleImpl::~ColumnFamilyHandleImpl() {
         db_->FindObsoleteFiles(&job_context, false, true);
       }
     }
-    mutex_->Unlock();
+    mutex_->Unlock(db_->immutable_db_options().info_log.get());
     if (job_context.HaveSomethingToDelete()) {
       bool defer_purge =
           db_->immutable_db_options().avoid_unnecessary_blocking_io;
       db_->PurgeObsoleteFiles(job_context, defer_purge);
       if (defer_purge) {
-        mutex_->Lock();
+        mutex_->Lock(__func__, __LINE__);
         db_->SchedulePurge();
-        mutex_->Unlock();
+        mutex_->Unlock(db_->immutable_db_options().info_log.get());
       }
     }
     job_context.Clean();
@@ -92,7 +92,7 @@ const std::string& ColumnFamilyHandleImpl::GetName() const {
 Status ColumnFamilyHandleImpl::GetDescriptor(ColumnFamilyDescriptor* desc) {
 #ifndef ROCKSDB_LITE
   // accessing mutable cf-options requires db mutex.
-  InstrumentedMutexLock l(mutex_);
+  InstrumentedMutexLock l(mutex_, __func__, __LINE__, db_->immutable_db_options().info_log.get());
   *desc = ColumnFamilyDescriptor(cfd()->GetName(), cfd()->GetLatestCFOptions());
   return Status::OK();
 #else
@@ -516,9 +516,9 @@ ColumnFamilyData::~ColumnFamilyData() {
   if (super_version_ != nullptr) {
     // Release SuperVersion reference kept in ThreadLocalPtr.
     // This must be done outside of mutex_ since unref handler can lock mutex.
-    super_version_->db_mutex->Unlock();
+    super_version_->db_mutex->Unlock(ioptions_.info_log);
     local_sv_.reset();
-    super_version_->db_mutex->Lock();
+    super_version_->db_mutex->Lock(__func__, __LINE__);
 
     bool is_last_reference __attribute__((__unused__));
     is_last_reference = super_version_->Unref();
@@ -1053,16 +1053,16 @@ SuperVersion* ColumnFamilyData::GetThreadLocalSuperVersion(
 
     if (sv && sv->Unref()) {
       RecordTick(ioptions_.statistics, NUMBER_SUPERVERSION_CLEANUPS);
-      db_mutex->Lock();
+      db_mutex->Lock(__func__, __LINE__);
       // NOTE: underlying resources held by superversion (sst files) might
       // not be released until the next background job.
       sv->Cleanup();
       sv_to_delete = sv;
     } else {
-      db_mutex->Lock();
+      db_mutex->Lock(__func__, __LINE__);
     }
     sv = super_version_->Ref();
-    db_mutex->Unlock();
+    db_mutex->Unlock(ioptions_.info_log);
 
     delete sv_to_delete;
   }

@@ -16,24 +16,24 @@
 namespace rocksdb {
 
 uint64_t DBImpl::TEST_GetLevel0TotalSize() {
-  InstrumentedMutexLock l(&mutex_);
+  InstrumentedMutexLock l(&mutex_, __func__, __LINE__, immutable_db_options_.info_log.get());
   return default_cf_handle_->cfd()->current()->storage_info()->NumLevelBytes(0);
 }
 
 void DBImpl::TEST_SwitchWAL() {
   WriteContext write_context;
-  InstrumentedMutexLock l(&mutex_);
+  InstrumentedMutexLock l(&mutex_, __func__, __LINE__, immutable_db_options_.info_log.get());
   SwitchWAL(&write_context);
 }
 
 bool DBImpl::TEST_WALBufferIsEmpty(bool lock) {
   if (lock) {
-    log_write_mutex_.Lock();
+    log_write_mutex_.Lock(__func__, __LINE__);
   }
   log::Writer* cur_log_writer = logs_.back().writer;
   auto res = cur_log_writer->TEST_BufferIsEmpty();
   if (lock) {
-    log_write_mutex_.Unlock();
+    log_write_mutex_.Unlock(nullptr);
   }
   return res;
 }
@@ -47,7 +47,7 @@ int64_t DBImpl::TEST_MaxNextLevelOverlappingBytes(
     auto cfh = reinterpret_cast<ColumnFamilyHandleImpl*>(column_family);
     cfd = cfh->cfd();
   }
-  InstrumentedMutexLock l(&mutex_);
+  InstrumentedMutexLock l(&mutex_, __func__, __LINE__, immutable_db_options_.info_log.get());
   return cfd->current()->storage_info()->MaxNextLevelOverlappingBytes();
 }
 
@@ -56,7 +56,7 @@ void DBImpl::TEST_GetFilesMetaData(
     std::vector<std::vector<FileMetaData>>* metadata) {
   auto cfh = reinterpret_cast<ColumnFamilyHandleImpl*>(column_family);
   auto cfd = cfh->cfd();
-  InstrumentedMutexLock l(&mutex_);
+  InstrumentedMutexLock l(&mutex_, __func__, __LINE__, immutable_db_options_.info_log.get());
   metadata->resize(NumberLevels());
   for (int level = 0; level < NumberLevels(); level++) {
     const std::vector<FileMetaData*>& files =
@@ -100,7 +100,7 @@ Status DBImpl::TEST_CompactRange(int level, const Slice* begin,
 
 Status DBImpl::TEST_SwitchMemtable(ColumnFamilyData* cfd) {
   WriteContext write_context;
-  InstrumentedMutexLock l(&mutex_);
+  InstrumentedMutexLock l(&mutex_, __func__, __LINE__, immutable_db_options_.info_log.get());
   if (cfd == nullptr) {
     cfd = default_cf_handle_->cfd();
   }
@@ -159,7 +159,7 @@ Status DBImpl::TEST_WaitForCompact(bool wait_unscheduled) {
   // wait for compact. It actually waits for scheduled compaction
   // OR flush to finish.
 
-  InstrumentedMutexLock l(&mutex_);
+  InstrumentedMutexLock l(&mutex_, __func__, __LINE__, immutable_db_options_.info_log.get());
   while ((bg_bottom_compaction_scheduled_ || bg_compaction_scheduled_ ||
           bg_flush_scheduled_ ||
           (wait_unscheduled && unscheduled_compactions_)) &&
@@ -169,9 +169,9 @@ Status DBImpl::TEST_WaitForCompact(bool wait_unscheduled) {
   return error_handler_.GetBGError();
 }
 
-void DBImpl::TEST_LockMutex() { mutex_.Lock(); }
+void DBImpl::TEST_LockMutex() { mutex_.Lock(__func__, __LINE__); }
 
-void DBImpl::TEST_UnlockMutex() { mutex_.Unlock(); }
+void DBImpl::TEST_UnlockMutex() { mutex_.Unlock(immutable_db_options_.info_log.get()); }
 
 void* DBImpl::TEST_BeginWrite() {
   auto w = new WriteThread::Writer();
@@ -186,12 +186,12 @@ void DBImpl::TEST_EndWrite(void* w) {
 }
 
 size_t DBImpl::TEST_LogsToFreeSize() {
-  InstrumentedMutexLock l(&mutex_);
+  InstrumentedMutexLock l(&mutex_, __func__, __LINE__, immutable_db_options_.info_log.get());
   return logs_to_free_.size();
 }
 
 uint64_t DBImpl::TEST_LogfileNumber() {
-  InstrumentedMutexLock l(&mutex_);
+  InstrumentedMutexLock l(&mutex_, __func__, __LINE__, immutable_db_options_.info_log.get());
   return logfile_number_;
 }
 
@@ -200,7 +200,7 @@ Status DBImpl::TEST_GetAllImmutableCFOptions(
   std::vector<std::string> cf_names;
   std::vector<const ImmutableCFOptions*> iopts;
   {
-    InstrumentedMutexLock l(&mutex_);
+    InstrumentedMutexLock l(&mutex_, __func__, __LINE__, immutable_db_options_.info_log.get());
     for (auto cfd : *versions_->GetColumnFamilySet()) {
       cf_names.push_back(cfd->GetName());
       iopts.push_back(cfd->ioptions());
@@ -234,7 +234,7 @@ uint64_t DBImpl::TEST_FindMinPrepLogReferencedByMemTable() {
 
 Status DBImpl::TEST_GetLatestMutableCFOptions(
     ColumnFamilyHandle* column_family, MutableCFOptions* mutable_cf_options) {
-  InstrumentedMutexLock l(&mutex_);
+  InstrumentedMutexLock l(&mutex_, __func__, __LINE__, immutable_db_options_.info_log.get());
 
   auto cfh = reinterpret_cast<ColumnFamilyHandleImpl*>(column_family);
   *mutable_cf_options = *cfh->cfd()->GetLatestMutableCFOptions();
@@ -242,12 +242,12 @@ Status DBImpl::TEST_GetLatestMutableCFOptions(
 }
 
 int DBImpl::TEST_BGCompactionsAllowed() const {
-  InstrumentedMutexLock l(&mutex_);
+  InstrumentedMutexLock l(&mutex_, __func__, __LINE__, immutable_db_options_.info_log.get());
   return GetBGJobLimits().max_compactions;
 }
 
 int DBImpl::TEST_BGFlushesAllowed() const {
-  InstrumentedMutexLock l(&mutex_);
+  InstrumentedMutexLock l(&mutex_, __func__, __LINE__, immutable_db_options_.info_log.get());
   return GetBGJobLimits().max_flushes;
 }
 
@@ -261,7 +261,7 @@ SequenceNumber DBImpl::TEST_GetLastVisibleSequence() const {
 
 size_t DBImpl::TEST_GetWalPreallocateBlockSize(
     uint64_t write_buffer_size) const {
-  InstrumentedMutexLock l(&mutex_);
+  InstrumentedMutexLock l(&mutex_, __func__, __LINE__, immutable_db_options_.info_log.get());
   return GetWalPreallocateBlockSize(write_buffer_size);
 }
 

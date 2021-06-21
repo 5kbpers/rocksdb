@@ -538,7 +538,7 @@ Status DBImpl::PersistentStatsProcessFormatVersion() {
   Status s;
   // persist version when stats CF doesn't exist
   bool should_persist_format_version = !persistent_stats_cfd_exists_;
-  mutex_.Unlock();
+  mutex_.Unlock(immutable_db_options_.info_log.get());
   if (persistent_stats_cfd_exists_) {
     // Check persistent stats format version compatibility. Drop and recreate
     // persistent stats CF if format version is incompatible
@@ -594,7 +594,7 @@ Status DBImpl::PersistentStatsProcessFormatVersion() {
     wo.sync = false;
     s = Write(wo, &batch);
   }
-  mutex_.Lock();
+  mutex_.Lock(__func__, __LINE__);
   return s;
 }
 
@@ -614,13 +614,13 @@ Status DBImpl::InitPersistStatsColumnFamily() {
     persist_stats_cf_handle_ =
         new ColumnFamilyHandleImpl(persistent_stats_cfd, this, &mutex_);
   } else {
-    mutex_.Unlock();
+    mutex_.Unlock(immutable_db_options_.info_log.get());
     ColumnFamilyHandle* handle = nullptr;
     ColumnFamilyOptions cfo;
     OptimizeForPersistentStats(&cfo);
     s = CreateColumnFamily(cfo, kPersistentStatsColumnFamilyName, &handle);
     persist_stats_cf_handle_ = static_cast<ColumnFamilyHandleImpl*>(handle);
-    mutex_.Lock();
+    mutex_.Lock(__func__, __LINE__);
   }
   return s;
 }
@@ -1051,7 +1051,7 @@ Status DBImpl::RestoreAliveLogFiles(const std::vector<uint64_t>& log_numbers) {
   mutex_.AssertHeld();
   assert(immutable_db_options_.avoid_flush_during_recovery);
   if (two_write_queues_) {
-    log_write_mutex_.Lock();
+    log_write_mutex_.Lock(__func__, __LINE__);
   }
   // Mark these as alive so they'll be considered for deletion later by
   // FindObsoleteFiles()
@@ -1092,7 +1092,7 @@ Status DBImpl::RestoreAliveLogFiles(const std::vector<uint64_t>& log_numbers) {
     }
   }
   if (two_write_queues_) {
-    log_write_mutex_.Unlock();
+    log_write_mutex_.Unlock(nullptr);
   }
   return s;
 }
@@ -1129,7 +1129,7 @@ Status DBImpl::WriteLevel0TableForRecovery(int job_id, ColumnFamilyData* cfd,
 
     {
       auto write_hint = cfd->CalculateSSTWriteHint(0);
-      mutex_.Unlock();
+      mutex_.Unlock(immutable_db_options_.info_log.get());
 
       SequenceNumber earliest_write_conflict_snapshot;
       std::vector<SequenceNumber> snapshot_seqs =
@@ -1163,7 +1163,7 @@ Status DBImpl::WriteLevel0TableForRecovery(int job_id, ColumnFamilyData* cfd,
                       " Level-0 table #%" PRIu64 ": %" PRIu64 " bytes %s",
                       cfd->GetName().c_str(), meta.fd.GetNumber(),
                       meta.fd.GetFileSize(), s.ToString().c_str());
-      mutex_.Lock();
+      mutex_.Lock(__func__, __LINE__);
     }
   }
   ReleaseFileNumberFromPendingOutputs(pending_outputs_inserted_elem);
@@ -1328,7 +1328,7 @@ Status DBImpl::Open(const DBOptions& db_options, const std::string& dbname,
   impl->wal_in_db_path_ =
       IsWalDirSameAsDBPath(&impl->immutable_db_options_);
 
-  impl->mutex_.Lock();
+  impl->mutex_.Lock(__func__, __LINE__);
   // Handles create_if_missing, error_if_exists
   s = impl->Recover(column_families);
   if (s.ok()) {
@@ -1339,7 +1339,7 @@ Status DBImpl::Open(const DBOptions& db_options, const std::string& dbname,
     s = impl->CreateWAL(new_log_number, 0 /*recycle_log_number*/,
                         preallocate_block_size, &new_log);
     if (s.ok()) {
-      InstrumentedMutexLock wl(&impl->log_write_mutex_);
+      InstrumentedMutexLock wl(&impl->log_write_mutex_, __func__, __LINE__, nullptr);
       impl->logfile_number_ = new_log_number;
       assert(new_log != nullptr);
       impl->logs_.emplace_back(new_log_number, new_log);
@@ -1358,9 +1358,9 @@ Status DBImpl::Open(const DBOptions& db_options, const std::string& dbname,
           if (db_options.create_missing_column_families) {
             // missing column family, create it
             ColumnFamilyHandle* handle;
-            impl->mutex_.Unlock();
+            impl->mutex_.Unlock(impl->immutable_db_options_.info_log.get());
             s = impl->CreateColumnFamily(cf.options, cf.name, &handle);
-            impl->mutex_.Lock();
+            impl->mutex_.Lock(__func__, __LINE__);
             if (s.ok()) {
               handles->push_back(handle);
             } else {
@@ -1381,12 +1381,12 @@ Status DBImpl::Open(const DBOptions& db_options, const std::string& dbname,
       }
       sv_context.Clean();
       if (impl->two_write_queues_) {
-        impl->log_write_mutex_.Lock();
+        impl->log_write_mutex_.Lock(__func__, __LINE__);
       }
       impl->alive_log_files_.push_back(
           DBImpl::LogFileNumberSize(impl->logfile_number_));
       if (impl->two_write_queues_) {
-        impl->log_write_mutex_.Unlock();
+        impl->log_write_mutex_.Unlock(nullptr);
       }
       impl->DeleteObsoleteFiles();
       s = impl->directories_.GetDbDir()->Fsync();
@@ -1438,7 +1438,7 @@ Status DBImpl::Open(const DBOptions& db_options, const std::string& dbname,
     impl->opened_successfully_ = true;
     impl->MaybeScheduleFlushOrCompaction();
   }
-  impl->mutex_.Unlock();
+  impl->mutex_.Unlock(impl->immutable_db_options_.info_log.get());
 
 #ifndef ROCKSDB_LITE
   auto sfm = static_cast<SstFileManagerImpl*>(

@@ -41,7 +41,7 @@ RuleToSuggestions = {
 class TestAllRulesTriggered(unittest.TestCase):
     def setUp(self):
         # load the Rules
-        this_path = os.path.abspath(os.path.dirname(__file__))
+        this_path = os.path.abspath(os.path.dirname(__func__))
         ini_path = os.path.join(this_path, 'input_files/triggered_rules.ini')
         self.db_rules = RulesSpec(ini_path)
         self.db_rules.load_rules_from_spec()
@@ -98,7 +98,7 @@ class TestAllRulesTriggered(unittest.TestCase):
 class TestConditionsConjunctions(unittest.TestCase):
     def setUp(self):
         # load the Rules
-        this_path = os.path.abspath(os.path.dirname(__file__))
+        this_path = os.path.abspath(os.path.dirname(__func__))
         ini_path = os.path.join(this_path, 'input_files/test_rules.ini')
         self.db_rules = RulesSpec(ini_path)
         self.db_rules.load_rules_from_spec()
@@ -160,7 +160,7 @@ class TestConditionsConjunctions(unittest.TestCase):
 
 class TestSanityChecker(unittest.TestCase):
     def setUp(self):
-        this_path = os.path.abspath(os.path.dirname(__file__))
+        this_path = os.path.abspath(os.path.dirname(__func__))
         ini_path = os.path.join(this_path, 'input_files/rules_err1.ini')
         db_rules = RulesSpec(ini_path)
         db_rules.load_rules_from_spec()
@@ -206,7 +206,7 @@ class TestSanityChecker(unittest.TestCase):
 
 class TestParsingErrors(unittest.TestCase):
     def setUp(self):
-        self.this_path = os.path.abspath(os.path.dirname(__file__))
+        self.this_path = os.path.abspath(os.path.dirname(__func__))
 
     def test_condition_missing_source(self):
         ini_path = os.path.join(self.this_path, 'input_files/rules_err2.ini')

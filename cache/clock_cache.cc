@@ -383,7 +383,7 @@ size_t ClockCacheShard::GetPinnedUsage() const {
 void ClockCacheShard::ApplyToAllCacheEntries(void (*callback)(void*, size_t),
                                              bool thread_safe) {
   if (thread_safe) {
-    mutex_.Lock();
+    mutex_.Lock(__func__, __LINE__);
   }
   for (auto& handle : list_) {
     // Use relaxed semantics instead of acquire semantics since we are either

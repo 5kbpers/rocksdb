@@ -48,14 +48,14 @@ void EventHelpers::NotifyOnBackgroundError(
   }
   db_mutex->AssertHeld();
   // release lock while notifying events
-  db_mutex->Unlock();
+  db_mutex->Unlock(nullptr);
   for (auto& listener : listeners) {
     listener->OnBackgroundError(reason, bg_error);
     if (*auto_recovery) {
       listener->OnErrorRecoveryBegin(reason, *bg_error, auto_recovery);
     }
   }
-  db_mutex->Lock();
+  db_mutex->Lock(__func__, __LINE__);
 #else
   (void)listeners;
   (void)reason;
@@ -203,11 +203,11 @@ void EventHelpers::NotifyOnErrorRecoveryCompleted(
   }
   db_mutex->AssertHeld();
   // release lock while notifying events
-  db_mutex->Unlock();
+  db_mutex->Unlock(nullptr);
   for (auto& listener : listeners) {
     listener->OnErrorRecoveryCompleted(old_bg_error);
   }
-  db_mutex->Lock();
+  db_mutex->Lock(__func__, __LINE__);
 #else
   (void)listeners;
   (void)old_bg_error;

@@ -297,7 +297,7 @@ Status FlushJob::WriteLevel0Table() {
   Status s;
   {
     auto write_hint = cfd_->CalculateSSTWriteHint(0);
-    db_mutex_->Unlock();
+    db_mutex_->Unlock(db_options_.info_log.get());
     if (log_buffer_) {
       log_buffer_->FlushBufferToLog();
     }
@@ -393,7 +393,7 @@ Status FlushJob::WriteLevel0Table() {
       s = output_file_directory_->Fsync();
     }
     TEST_SYNC_POINT_CALLBACK("FlushJob::WriteLevel0Table", &mems_);
-    db_mutex_->Lock();
+    db_mutex_->Lock(__func__, __LINE__);
   }
   base_->Unref();
 

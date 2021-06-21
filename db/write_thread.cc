@@ -756,7 +756,7 @@ void WriteThread::ExitAsBatchGroupLeader(WriteGroup& write_group,
 static WriteThread::AdaptationContext eu_ctx("EnterUnbatched");
 void WriteThread::EnterUnbatched(Writer* w, InstrumentedMutex* mu) {
   assert(w != nullptr && w->batches.empty());
-  mu->Unlock();
+  mu->Unlock(nullptr);
   bool linked_as_leader = LinkOne(w, &newest_writer_);
   if (!linked_as_leader) {
     TEST_SYNC_POINT("WriteThread::EnterUnbatched:Wait");
@@ -766,7 +766,7 @@ void WriteThread::EnterUnbatched(Writer* w, InstrumentedMutex* mu) {
   if (enable_pipelined_write_) {
     WaitForMemTableWriters();
   }
-  mu->Lock();
+  mu->Lock(__func__, __LINE__);
 }
 
 void WriteThread::ExitUnbatched(Writer* w) {

@@ -85,7 +85,7 @@ std::vector<Status> CompactedDBImpl::MultiGet(const ReadOptions& options,
 
 Status CompactedDBImpl::Init(const Options& options) {
   SuperVersionContext sv_context(/* create_superversion */ true);
-  mutex_.Lock();
+  mutex_.Lock(__func__, __LINE__);
   ColumnFamilyDescriptor cf(kDefaultColumnFamilyName,
                             ColumnFamilyOptions(options));
   Status s = Recover({cf}, true /* read only */, false, true);
@@ -94,7 +94,7 @@ Status CompactedDBImpl::Init(const Options& options) {
               DefaultColumnFamily())->cfd();
     cfd_->InstallSuperVersion(&sv_context, &mutex_);
   }
-  mutex_.Unlock();
+  mutex_.Unlock(cfd_->ioptions()->info_log);
   sv_context.Clean();
   if (!s.ok()) {
     return s;

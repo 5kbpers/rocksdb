@@ -519,10 +519,10 @@ void CompactionJob::GenSubcompactionBoundaries() {
     // ApproximateSize could potentially create table reader iterator to seek
     // to the index block and may incur I/O cost in the process. Unlock db
     // mutex to reduce contention
-    db_mutex_->Unlock();
+    db_mutex_->Unlock(db_options_.info_log.get());
     uint64_t size = versions_->ApproximateSize(v, a, b, start_lvl, out_lvl + 1,
                                                TableReaderCaller::kCompaction);
-    db_mutex_->Lock();
+    db_mutex_->Lock(__func__, __LINE__);
     ranges.emplace_back(a, b, size);
     sum += size;
   }
@@ -1358,7 +1358,7 @@ Status CompactionJob::FinishCompactionOutputFile(
       TEST_SYNC_POINT(
           "CompactionJob::FinishCompactionOutputFile:"
           "MaxAllowedSpaceReached");
-      InstrumentedMutexLock l(db_mutex_);
+      InstrumentedMutexLock l(db_mutex_, __func__, __LINE__, db_options_.info_log.get());
       db_error_handler_->SetBGError(s, BackgroundErrorReason::kCompaction);
     }
   }

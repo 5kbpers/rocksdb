@@ -2190,13 +2190,13 @@ class Benchmark {
     }
 
     void OnErrorRecoveryCompleted(Status /*old_bg_error*/) override {
-      InstrumentedMutexLock l(&mutex_);
+      InstrumentedMutexLock l(&mutex_, __func__, __LINE__, nullptr);
       recovery_complete_ = true;
       cv_.SignalAll();
     }
 
     bool WaitForRecovery(uint64_t abs_time_us) {
-      InstrumentedMutexLock l(&mutex_);
+      InstrumentedMutexLock l(&mutex_, __func__, __LINE__, nullptr);
       if (!recovery_complete_) {
         cv_.TimedWait(abs_time_us);
       }

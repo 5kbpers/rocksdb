@@ -40,7 +40,7 @@ class RepeatableThread {
 
   void cancel() {
     {
-      InstrumentedMutexLock l(&mutex_);
+      InstrumentedMutexLock l(&mutex_, "", 0, nullptr);
       if (!running_) {
         return;
       }
@@ -62,7 +62,7 @@ class RepeatableThread {
   //
   // Note: only support one caller of this method.
   void TEST_WaitForRun(std::function<void()> callback = nullptr) {
-    InstrumentedMutexLock l(&mutex_);
+    InstrumentedMutexLock l(&mutex_, "", 0, nullptr);
     while (!waiting_) {
       cond_var_.Wait();
     }
@@ -79,7 +79,7 @@ class RepeatableThread {
 
  private:
   bool wait(uint64_t delay) {
-    InstrumentedMutexLock l(&mutex_);
+    InstrumentedMutexLock l(&mutex_, "", 0, nullptr);
     if (running_ && delay > 0) {
       uint64_t wait_until = env_->NowMicros() + delay;
 #ifndef NDEBUG
@@ -118,7 +118,7 @@ class RepeatableThread {
       function_();
 #ifndef NDEBUG
       {
-        InstrumentedMutexLock l(&mutex_);
+        InstrumentedMutexLock l(&mutex_, "", 0, nullptr);
         run_count_++;
         cond_var_.SignalAll();
       }

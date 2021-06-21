@@ -32,7 +32,7 @@ Status DBImpl::SuggestCompactRange(ColumnFamilyHandle* column_family,
     end_key.SetMaxPossibleForUserKey(*end);
   }
   {
-    InstrumentedMutexLock l(&mutex_);
+    InstrumentedMutexLock l(&mutex_, __func__, __LINE__, immutable_db_options_.info_log.get());
     auto vstorage = cfd->current()->storage_info();
     for (int level = 0; level < vstorage->num_non_empty_levels() - 1; ++level) {
       std::vector<FileMetaData*> inputs;
@@ -66,7 +66,7 @@ Status DBImpl::PromoteL0(ColumnFamilyHandle* column_family, int target_level) {
   VersionEdit edit;
   JobContext job_context(next_job_id_.fetch_add(1), true);
   {
-    InstrumentedMutexLock l(&mutex_);
+    InstrumentedMutexLock l(&mutex_, __func__, __LINE__, immutable_db_options_.info_log.get());
     auto* cfd = static_cast<ColumnFamilyHandleImpl*>(column_family)->cfd();
     const auto* vstorage = cfd->current()->storage_info();
 

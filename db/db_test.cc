@@ -404,9 +404,9 @@ TEST_F(DBTest, MixedSlowdownOptionsStop) {
     ASSERT_NOK(dbfull()->Put(wo, key, "bar"));
   };
   std::function<void()> wakeup_writer = [&]() {
-    dbfull()->mutex_.Lock();
+    dbfull()->mutex_.Lock(__func__, __LINE__);
     dbfull()->bg_cv_.SignalAll();
-    dbfull()->mutex_.Unlock();
+    dbfull()->mutex_.Unlock(nullptr);
   };
   // Use a small number to ensure a large delay that is still effective
   // when we do Put

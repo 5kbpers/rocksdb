@@ -1116,7 +1116,7 @@ class SharedState {
 
   void LockColumnFamily(int cf) {
     for (auto& mutex : key_locks_[cf]) {
-      mutex->Lock();
+      mutex->Lock(__func__, __LINE__);
     }
   }
 

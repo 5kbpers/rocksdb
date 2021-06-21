@@ -234,13 +234,13 @@ void ForwardIterator::SVCleanup(DBImpl* db, SuperVersion* sv,
     // Job id == 0 means that this is not our background process, but rather
     // user thread
     JobContext job_context(0);
-    db->mutex_.Lock();
+    db->mutex_.Lock(__func__, __LINE__);
     sv->Cleanup();
     db->FindObsoleteFiles(&job_context, false, true);
     if (background_purge_on_iterator_cleanup) {
       db->ScheduleBgLogWriterClose(&job_context);
     }
-    db->mutex_.Unlock();
+    db->mutex_.Unlock(db->immutable_db_options().info_log.get());
     delete sv;
     if (job_context.HaveSomethingToDelete()) {
       db->PurgeObsoleteFiles(job_context, background_purge_on_iterator_cleanup);

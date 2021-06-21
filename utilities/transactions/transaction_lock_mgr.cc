@@ -184,7 +184,7 @@ size_t LockMap::GetStripe(const std::string& key) const {
 }
 
 void TransactionLockMgr::AddColumnFamily(uint32_t column_family_id) {
-  InstrumentedMutexLock l(&lock_map_mutex_);
+  InstrumentedMutexLock l(&lock_map_mutex_, "", 0, nullptr);
 
   if (lock_maps_.find(column_family_id) == lock_maps_.end()) {
     lock_maps_.emplace(column_family_id,
@@ -200,7 +200,7 @@ void TransactionLockMgr::RemoveColumnFamily(uint32_t column_family_id) {
   // as a shared ptr, concurrent transactions can still keep using it
   // until they release their references to it.
   {
-    InstrumentedMutexLock l(&lock_map_mutex_);
+    InstrumentedMutexLock l(&lock_map_mutex_, "", 0, nullptr);
 
     auto lock_maps_iter = lock_maps_.find(column_family_id);
     assert(lock_maps_iter != lock_maps_.end());
@@ -235,7 +235,7 @@ std::shared_ptr<LockMap> TransactionLockMgr::GetLockMap(
   }
 
   // Not found in local cache, grab mutex and check shared LockMaps
-  InstrumentedMutexLock l(&lock_map_mutex_);
+  InstrumentedMutexLock l(&lock_map_mutex_, "", 0, nullptr);
 
   lock_map_iter = lock_maps_.find(column_family_id);
   if (lock_map_iter == lock_maps_.end()) {
@@ -699,7 +699,7 @@ TransactionLockMgr::LockStatusData TransactionLockMgr::GetLockStatusData() {
   // Lock order here is important. The correct order is lock_map_mutex_, then
   // for every column family ID in ascending order lock every stripe in
   // ascending order.
-  InstrumentedMutexLock l(&lock_map_mutex_);
+  InstrumentedMutexLock l(&lock_map_mutex_, "", 0, nullptr);
 
   std::vector<uint32_t> cf_ids;
   for (const auto& map : lock_maps_) {

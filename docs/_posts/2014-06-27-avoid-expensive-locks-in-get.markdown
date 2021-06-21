@@ -16,7 +16,7 @@ RocksDB employs a multiversion concurrency control strategy. Before reading data
 At the beginning of `GetImpl()`, it used to do this:
 
 
-    <span class="zw-portion">mutex_.Lock();
+    <span class="zw-portion">mutex_.Lock(__func__, __LINE__);
     </span>auto* s = super_version_->Ref();
     mutex_.Unlock();
 
@@ -43,7 +43,7 @@ The code looks something like this:
     SuperVersion* s = thread_local_->Get();
     if (s->version_number != super_version_number_.load()) {
       // slow path, cleanup of current super version is omitted
-      mutex_.Lock();
+      mutex_.Lock(__func__, __LINE__);
       s = super_version_->Ref();
       mutex_.Unlock();
     }

@@ -31,6 +31,7 @@ class InstrumentedMutex {
         stats_code_(stats_code) {}
 
   void Lock(std::string func, int line);
+  void Lock();
 
   void Unlock(Logger* info_log) {
     uint64_t time = env_->NowNanos() - lock_time_nanos_;
@@ -39,6 +40,10 @@ class InstrumentedMutex {
     }
     func_ = "";
     line_ = 0;
+    mutex_.Unlock();
+  }
+
+  void Unlock() {
     mutex_.Unlock();
   }
 
@@ -64,6 +69,10 @@ class InstrumentedMutexLock {
  public:
   explicit InstrumentedMutexLock(InstrumentedMutex* mutex, std::string func, int line, Logger* info_log) : mutex_(mutex), info_log_(info_log) {
     mutex_->Lock(func, line);
+  }
+
+  explicit InstrumentedMutexLock(InstrumentedMutex* mutex) : mutex_(mutex), info_log_(nullptr) {
+    mutex_->Lock();
   }
 
   ~InstrumentedMutexLock() {

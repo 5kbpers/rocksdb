@@ -34,7 +34,9 @@ void InstrumentedMutex::Lock(std::string func, int line) {
   LockInternal();
   func_ = func;
   line_ = line; 
-  lock_time_nanos_ = env_->NowNanos();
+  if (env_ != nullptr) {
+    lock_time_nanos_ = env_->NowNanos();
+  }
 }
 
 void InstrumentedMutex::LockInternal() {

@@ -34,9 +34,11 @@ class InstrumentedMutex {
   void Lock();
 
   void Unlock(Logger* info_log) {
-    uint64_t time = env_->NowNanos() - lock_time_nanos_;
-    if (info_log != nullptr && time > 1000 * 100) {
-      ROCKS_LOG_WARN(info_log, ">>>>>> %s line %d db mutex costs %" PRIu64 "us\n", func_.c_str(), line_, time);
+    if (env_ != nullptr) {
+      uint64_t time = env_->NowNanos() - lock_time_nanos_;
+      if (info_log != nullptr && time > 1000 * 100) {
+        ROCKS_LOG_WARN(info_log, ">>>>>> %s line %d db mutex costs %" PRIu64 "us\n", func_.c_str(), line_, time);
+      }
     }
     func_ = "";
     line_ = 0;

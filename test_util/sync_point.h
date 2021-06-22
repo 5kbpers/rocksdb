@@ -35,7 +35,7 @@ extern void TestKillRandom(std::string kill_point, int odds,
 #define TEST_KILL_RANDOM(kill_point, rocksdb_kill_odds)                  \
   {                                                                      \
     if (rocksdb_kill_odds > 0) {                                         \
-      TestKillRandom(kill_point, rocksdb_kill_odds, __func__, __LINE__); \
+      TestKillRandom(kill_point, rocksdb_kill_odds, __FILE__, __LINE__); \
     }                                                                    \
   }
 }  // namespace rocksdb

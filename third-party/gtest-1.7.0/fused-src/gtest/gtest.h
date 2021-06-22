@@ -2415,7 +2415,7 @@ class GTEST_API_ GTestLog {
 
 #define GTEST_LOG_(severity) \
     ::testing::internal::GTestLog(::testing::internal::GTEST_##severity, \
-                                  __func__, __LINE__).GetStream()
+                                  __FILE__, __LINE__).GetStream()
 
 inline void LogToStderr() {}
 inline void FlushInfoLog() { fflush(NULL); }
@@ -8561,7 +8561,7 @@ class NativeArray {
     = ::testing::Message()
 
 #define GTEST_MESSAGE_(message, result_type) \
-  GTEST_MESSAGE_AT_(__func__, __LINE__, message, result_type)
+  GTEST_MESSAGE_AT_(__FILE__, __LINE__, message, result_type)
 
 #define GTEST_FATAL_FAILURE_(message) \
   return GTEST_MESSAGE_(message, ::testing::TestPartResult::kFatalFailure)
@@ -8899,7 +8899,7 @@ GTEST_API_ bool ExitedUnsuccessfully(int exit_status);
         stderr, \
         "\n%s: Caught std::exception-derived exception escaping the " \
         "death test statement. Exception message: %s\n", \
-        ::testing::internal::FormatFileLocation(__func__, __LINE__).c_str(), \
+        ::testing::internal::FormatFileLocation(__FILE__, __LINE__).c_str(), \
         gtest_exception.what()); \
     fflush(stderr); \
     death_test->Abort(::testing::internal::DeathTest::TEST_THREW_EXCEPTION); \
@@ -8921,7 +8921,7 @@ GTEST_API_ bool ExitedUnsuccessfully(int exit_status);
     const ::testing::internal::RE& gtest_regex = (regex); \
     ::testing::internal::DeathTest* gtest_dt; \
     if (!::testing::internal::DeathTest::Create(#statement, &gtest_regex, \
-        __func__, __LINE__, &gtest_dt)) { \
+        __FILE__, __LINE__, &gtest_dt)) { \
       goto GTEST_CONCAT_TOKEN_(gtest_label_, __LINE__); \
     } \
     if (gtest_dt != NULL) { \
@@ -17575,7 +17575,7 @@ internal::CartesianProductHolder10<Generator1, Generator2, Generator3,
     static int AddToRegistry() { \
       ::testing::UnitTest::GetInstance()->parameterized_test_registry(). \
           GetTestCasePatternHolder<test_case_name>(\
-              #test_case_name, __func__, __LINE__)->AddTestPattern(\
+              #test_case_name, __FILE__, __LINE__)->AddTestPattern(\
                   #test_case_name, \
                   #test_name, \
                   new ::testing::internal::TestMetaFactory< \
@@ -17597,10 +17597,10 @@ internal::CartesianProductHolder10<Generator1, Generator2, Generator3,
   int gtest_##prefix##test_case_name##_dummy_ = \
       ::testing::UnitTest::GetInstance()->parameterized_test_registry(). \
           GetTestCasePatternHolder<test_case_name>(\
-              #test_case_name, __func__, __LINE__)->AddTestCaseInstantiation(\
+              #test_case_name, __FILE__, __LINE__)->AddTestCaseInstantiation(\
                   #prefix, \
                   &gtest_##prefix##test_case_name##_EvalGenerator_, \
-                  __func__, __LINE__)
+                  __FILE__, __LINE__)
 
 }  // namespace testing
 
@@ -18073,7 +18073,7 @@ INSTANTIATE_TYPED_TEST_CASE_P(My, FooTest, MyTypes);
   }; \
   static bool gtest_##TestName##_defined_ GTEST_ATTRIBUTE_UNUSED_ = \
       GTEST_TYPED_TEST_CASE_P_STATE_(CaseName).AddTestName(\
-          __func__, __LINE__, #CaseName, #TestName); \
+          __FILE__, __LINE__, #CaseName, #TestName); \
   } \
   template <typename gtest_TypeParam_> \
   void GTEST_CASE_NAMESPACE_(CaseName)::TestName<gtest_TypeParam_>::TestBody()
@@ -18084,7 +18084,7 @@ INSTANTIATE_TYPED_TEST_CASE_P(My, FooTest, MyTypes);
   } \
   static const char* const GTEST_REGISTERED_TEST_NAMES_(CaseName) = \
       GTEST_TYPED_TEST_CASE_P_STATE_(CaseName).VerifyRegisteredTestNames(\
-          __func__, __LINE__, #__VA_ARGS__)
+          __FILE__, __LINE__, #__VA_ARGS__)
 
 // The 'Types' template argument below must have spaces around it
 // since some compilers may choke on '>>' when passing a template
@@ -20599,7 +20599,7 @@ GTEST_API_ AssertionResult DoubleLE(const char* expr1, const char* expr2,
 // lines.
 #define SCOPED_TRACE(message) \
   ::testing::internal::ScopedTrace GTEST_CONCAT_TOKEN_(gtest_trace_, __LINE__)(\
-    __func__, __LINE__, ::testing::Message() << (message))
+    __FILE__, __LINE__, ::testing::Message() << (message))
 
 // Compile-time assertion for type equality.
 // StaticAssertTypeEq<type1, type2>() compiles iff type1 and type2 are

@@ -12,7 +12,7 @@ import unittest
 
 class TestDatabaseOptions(unittest.TestCase):
     def setUp(self):
-        self.this_path = os.path.abspath(os.path.dirname(__func__))
+        self.this_path = os.path.abspath(os.path.dirname(__file__))
         self.og_options = os.path.join(
             self.this_path, 'input_files/OPTIONS-000005'
         )

@@ -14,7 +14,7 @@ from unittest.mock import MagicMock
 
 class TestLogStatsParser(unittest.TestCase):
     def setUp(self):
-        this_path = os.path.abspath(os.path.dirname(__func__))
+        this_path = os.path.abspath(os.path.dirname(__file__))
         stats_file = os.path.join(
             this_path, 'input_files/log_stats_parser_keys_ts'
         )

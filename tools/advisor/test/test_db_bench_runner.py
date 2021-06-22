@@ -19,7 +19,7 @@ class TestDBBenchRunnerMethods(unittest.TestCase):
             'duration=10'
         ]
         self.bench_runner = DBBenchRunner(self.pos_args)
-        this_path = os.path.abspath(os.path.dirname(__func__))
+        this_path = os.path.abspath(os.path.dirname(__file__))
         options_path = os.path.join(this_path, 'input_files/OPTIONS-000005')
         self.db_options = DatabaseOptions(options_path)
 
@@ -110,7 +110,7 @@ class TestDBBenchRunner(unittest.TestCase):
             'duration=20'
         ]
         self.bench_runner = DBBenchRunner(self.pos_args)
-        this_path = os.path.abspath(os.path.dirname(__func__))
+        this_path = os.path.abspath(os.path.dirname(__file__))
         options_path = os.path.join(this_path, 'input_files/OPTIONS-000005')
         self.db_options = DatabaseOptions(options_path)
 

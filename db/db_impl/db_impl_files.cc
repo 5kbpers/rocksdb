@@ -46,6 +46,7 @@ uint64_t DBImpl::MinObsoleteSstNumberToKeep() {
 // force = true -- force the full scan
 void DBImpl::FindObsoleteFiles(JobContext* job_context, bool force,
                                bool no_full_scan) {
+  uint64_t start_time = env_->NowNanos();
   mutex_.AssertHeld();
 
   // if deletion is disabled, do nothing
@@ -237,6 +238,11 @@ void DBImpl::FindObsoleteFiles(JobContext* job_context, bool force,
     ++pending_purge_obsolete_files_;
   }
   logs_to_free_.clear();
+
+  uint64_t cost = env_->NowNanos() - start_time;
+  if (cost > 1000 * 1000 * 100) {
+    ROCKS_LOG_WARN(immutable_db_options_.info_log.get(), ">>>>>>>> FindObsoleteFiles costs %" PRIu64 "ms\n", cost / (1000 * 1000));
+  }
 }
 
 namespace {

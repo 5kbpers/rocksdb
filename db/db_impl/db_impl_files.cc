@@ -106,10 +106,7 @@ void DBImpl::FindObsoleteFiles(JobContext* job_context, bool force,
   job_context->log_number = MinLogNumberToKeep();
   job_context->prev_log_number = versions_->prev_log_number();
 
-  uint64_t add_live_files_start = env_->NowNanos();
-  versions_->AddLiveFiles(&job_context->sst_live);
-  uint64_t add_live_files_end = env_->NowNanos();
-  uint64_t doing_the_full_scan_start = add_live_files_end;
+  uint64_t doing_the_full_scan_start = env_->NowNanos();
   if (doing_the_full_scan) {
     InfoLogPrefix info_log_prefix(!immutable_db_options_.db_log_dir.empty(),
                                   dbname_);
@@ -245,7 +242,14 @@ void DBImpl::FindObsoleteFiles(JobContext* job_context, bool force,
   job_context->logs_to_free = logs_to_free_;
   job_context->log_recycle_files.assign(log_recycle_files_.begin(),
                                         log_recycle_files_.end());
+  uint64_t add_live_files_start = 0;
+  uint64_t add_live_files_end = 0;
+  uint64_t sst_lives = 0;
   if (job_context->HaveSomethingToDelete()) {
+    add_live_files_start = env_->NowNanos();
+    versions_->AddLiveFiles(&job_context->sst_live);
+    sst_lives = job_context->sst_live.size();
+    add_live_files_end = env_->NowNanos();
     ++pending_purge_obsolete_files_;
   }
   logs_to_free_.clear();
@@ -253,10 +257,11 @@ void DBImpl::FindObsoleteFiles(JobContext* job_context, bool force,
   uint64_t cost = env_->NowNanos() - start_time;
   if (cost > 1000 * 1000 * 100) {
     ROCKS_LOG_WARN(immutable_db_options_.info_log.get(),
-        ">>>>>>>> FindObsoleteFiles costs %" PRIu64 "ms: get_obsolete_files costs %" PRIu64 "ms, add_live_files costs %" PRIu64 "ms, doing_the_full_scan costs %" PRIu64 "ms, wait_log_sync costs %" PRIu64 "ms, obsoleted_log costs %" PRIu64 "ms\n",
+        ">>>>>>>> FindObsoleteFiles costs %" PRIu64 "ms: get_obsolete_files costs %" PRIu64 "ms, add_live_files costs %" PRIu64 "ms, has %" PRIu64" sst_lives, doing_the_full_scan costs %" PRIu64 "ms, wait_log_sync costs %" PRIu64 "ms, obsoleted_log costs %" PRIu64 "ms\n",
           cost / (1000 * 1000), 
           (get_obsolete_files_end - get_obsolete_files_start) / (1000 * 1000),
           (add_live_files_end - add_live_files_start) / (1000 * 1000),
+          sst_lives,
           (doing_the_full_scan_end - doing_the_full_scan_start) / (1000 * 1000),
           (wait_log_sync_end - wait_log_sync_start) / (1000 * 1000),
           (obsoleted_log_end - obsoleted_log_start) / (1000 * 1000)
@@ -334,6 +339,10 @@ void DBImpl::PurgeObsoleteFiles(JobContext& state, bool schedule_only) {
   for (const FileDescriptor& fd : state.sst_live) {
     sst_live_map[fd.GetNumber()] = &fd;
   }
+  ROCKS_LOG_WARN(immutable_db_options_.info_log.get(),
+      ">>>>>>>> PurgeObsoleteFiles maps ssts from %" PRIu64 " to %" PRIu64"\n",
+      state.sst_live.size(), sst_live_map.size()
+  );
   std::unordered_set<uint64_t> log_recycle_files_set(
       state.log_recycle_files.begin(), state.log_recycle_files.end());
 

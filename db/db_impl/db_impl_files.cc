@@ -84,6 +84,7 @@ void DBImpl::FindObsoleteFiles(JobContext* job_context, bool force,
     job_context->min_pending_output = std::numeric_limits<uint64_t>::max();
   }
 
+  uint64_t get_obsolete_files_start = env_->NowNanos();
   // Get obsolete files.  This function will also update the list of
   // pending files in VersionSet().
   versions_->GetObsoleteFiles(&job_context->sst_delete_files,
@@ -96,6 +97,7 @@ void DBImpl::FindObsoleteFiles(JobContext* job_context, bool force,
   for (const auto& sst_to_del : job_context->sst_delete_files) {
     MarkAsGrabbedForPurge(sst_to_del.metadata->fd.GetNumber());
   }
+  uint64_t get_obsolete_files_end = env_->NowNanos();
 
   // store the current filenum, lognum, etc
   job_context->manifest_file_number = versions_->manifest_file_number();
@@ -104,7 +106,10 @@ void DBImpl::FindObsoleteFiles(JobContext* job_context, bool force,
   job_context->log_number = MinLogNumberToKeep();
   job_context->prev_log_number = versions_->prev_log_number();
 
+  uint64_t add_live_files_start = env_->NowNanos();
   versions_->AddLiveFiles(&job_context->sst_live);
+  uint64_t add_live_files_end = env_->NowNanos();
+  uint64_t doing_the_full_scan_start = add_live_files_end;
   if (doing_the_full_scan) {
     InfoLogPrefix info_log_prefix(!immutable_db_options_.db_log_dir.empty(),
                                   dbname_);
@@ -177,7 +182,10 @@ void DBImpl::FindObsoleteFiles(JobContext* job_context, bool force,
       }
     }
   }
-
+  uint64_t doing_the_full_scan_end = env_->NowNanos();
+  uint64_t wait_log_sync_start = 0;
+  uint64_t wait_log_sync_end = 0;
+  uint64_t obsoleted_log_start = doing_the_full_scan_end;
   // logs_ is empty when called during recovery, in which case there can't yet
   // be any tracked obsolete logs
   if (!alive_log_files_.empty() && !logs_.empty()) {
@@ -212,6 +220,7 @@ void DBImpl::FindObsoleteFiles(JobContext* job_context, bool force,
       // number < MinLogNumber().
       assert(alive_log_files_.size());
     }
+    wait_log_sync_start = env_->NowNanos();
     while (!logs_.empty() && logs_.front().number < min_log_number) {
       auto& log = logs_.front();
       if (log.getting_synced) {
@@ -225,9 +234,11 @@ void DBImpl::FindObsoleteFiles(JobContext* job_context, bool force,
         logs_.pop_front();
       }
     }
+    wait_log_sync_end = env_->NowNanos();
     // Current log cannot be obsolete.
     assert(!logs_.empty());
   }
+  uint64_t obsoleted_log_end = env_->NowNanos();
 
   // We're just cleaning up for DB::Write().
   assert(job_context->logs_to_free.empty());
@@ -241,7 +252,15 @@ void DBImpl::FindObsoleteFiles(JobContext* job_context, bool force,
 
   uint64_t cost = env_->NowNanos() - start_time;
   if (cost > 1000 * 1000 * 100) {
-    ROCKS_LOG_WARN(immutable_db_options_.info_log.get(), ">>>>>>>> FindObsoleteFiles costs %" PRIu64 "ms\n", cost / (1000 * 1000));
+    ROCKS_LOG_WARN(immutable_db_options_.info_log.get(),
+        ">>>>>>>> FindObsoleteFiles costs %" PRIu64 "ms: get_obsolete_files costs %" PRIu64 "ms, add_live_files costs %" PRIu64 "ms, doing_the_full_scan costs %" PRIu64 "ms, wait_log_sync costs %" PRIu64 "ms, obsoleted_log costs %" PRIu64 "ms\n",
+          cost / (1000 * 1000), 
+          (get_obsolete_files_end - get_obsolete_files_start) / (1000 * 1000),
+          (add_live_files_end - add_live_files_start) / (1000 * 1000),
+          (doing_the_full_scan_end - doing_the_full_scan_start) / (1000 * 1000),
+          (wait_log_sync_end - wait_log_sync_start) / (1000 * 1000),
+          (obsoleted_log_end - obsoleted_log_start) / (1000 * 1000)
+    );
   }
 }
 

@@ -246,10 +246,12 @@ void DBImpl::FindObsoleteFiles(JobContext* job_context, bool force,
   uint64_t add_live_files_end = 0;
   uint64_t sst_lives = 0;
   if (job_context->HaveSomethingToDelete()) {
-    add_live_files_start = env_->NowNanos();
-    versions_->AddLiveFiles(&job_context->sst_live);
-    sst_lives = job_context->sst_live.size();
-    add_live_files_end = env_->NowNanos();
+    if (doing_the_full_scan) {
+      add_live_files_start = env_->NowNanos();
+      versions_->AddLiveFiles(&job_context->sst_live);
+      sst_lives = job_context->sst_live.size();
+      add_live_files_end = env_->NowNanos();
+    }
     ++pending_purge_obsolete_files_;
   }
   logs_to_free_.clear();

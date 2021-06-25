@@ -341,10 +341,6 @@ void DBImpl::PurgeObsoleteFiles(JobContext& state, bool schedule_only) {
   for (const FileDescriptor& fd : state.sst_live) {
     sst_live_map[fd.GetNumber()] = &fd;
   }
-  ROCKS_LOG_WARN(immutable_db_options_.info_log.get(),
-      ">>>>>>>> PurgeObsoleteFiles maps ssts from %" PRIu64 " to %" PRIu64"\n",
-      state.sst_live.size(), sst_live_map.size()
-  );
   std::unordered_set<uint64_t> log_recycle_files_set(
       state.log_recycle_files.begin(), state.log_recycle_files.end());
 

@@ -2579,7 +2579,7 @@ bool DBImpl::GetProperty(ColumnFamilyHandle* column_family,
   } else if (property_info->handle_int) {
     uint64_t int_value;
     bool ret_value =
-        GetIntPropertyInternal(cfd, *property_info, false, &int_value);
+        GetIntPropertyInternal(cfd, property, *property_info, false, &int_value);
     if (ret_value) {
       *value = ToString(int_value);
     }
@@ -2627,10 +2627,11 @@ bool DBImpl::GetIntProperty(ColumnFamilyHandle* column_family,
     return false;
   }
   auto cfd = reinterpret_cast<ColumnFamilyHandleImpl*>(column_family)->cfd();
-  return GetIntPropertyInternal(cfd, *property_info, false, value);
+  return GetIntPropertyInternal(cfd, property, *property_info, false, value);
 }
 
 bool DBImpl::GetIntPropertyInternal(ColumnFamilyData* cfd,
+                                    const Slice& property,
                                     const DBPropertyInfo& property_info,
                                     bool is_locked, uint64_t* value) {
   assert(property_info.handle_int != nullptr);
@@ -2640,7 +2641,16 @@ bool DBImpl::GetIntPropertyInternal(ColumnFamilyData* cfd,
       return cfd->internal_stats()->GetIntProperty(property_info, value, this);
     } else {
       InstrumentedMutexLock l(&mutex_, __func__, __LINE__, immutable_db_options_.info_log.get());;
-      return cfd->internal_stats()->GetIntProperty(property_info, value, this);
+      uint64_t start = env_->NowNanos();
+      auto properties = cfd->internal_stats()->GetIntProperty(property_info, value, this);
+      uint64_t cost = env_->NowNanos() - start;
+      if (cost > 1000 * 1000 * 10) {
+        ROCKS_LOG_WARN(immutable_db_options_.info_log.get(),
+            ">>>>>>>> GetIntProperty cost %" PRIu64 "ms for property %s\n",
+            cost, property.ToString().c_str()
+        );
+      }
+      return properties;
     }
   } else {
     SuperVersion* sv = nullptr;
@@ -2699,7 +2709,7 @@ bool DBImpl::GetAggregatedIntProperty(const Slice& property,
       if (!cfd->initialized()) {
         continue;
       }
-      if (GetIntPropertyInternal(cfd, *property_info, true, &value)) {
+      if (GetIntPropertyInternal(cfd, property, *property_info, true, &value)) {
         sum += value;
       } else {
         return false;

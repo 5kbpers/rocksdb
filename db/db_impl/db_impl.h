@@ -1553,6 +1553,7 @@ class DBImpl : public DB {
       const MutableCFOptions& mutable_cf_options);
 
   bool GetIntPropertyInternal(ColumnFamilyData* cfd,
+                              const Slice& property,
                               const DBPropertyInfo& property_info,
                               bool is_locked, uint64_t* value);
   bool GetPropertyHandleOptionsStatistics(std::string* value);
